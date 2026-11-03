@@ -1,0 +1,52 @@
+[project]
+name = "aitrade"
+version = "0.1.0"
+description = "AI crypto market intelligence & decision-support platform (backend)"
+requires-python = ">=3.12"
+dependencies = [
+    "aiosqlite>=0.22.1",
+    "anthropic>=2.3.0",
+    "asyncpg>=0.32.0",
+    "bcrypt>=5.0.0",
+    "fastapi>=0.162.0",
+    "feedparser>=6.0.14",
+    "httpx>=0.28.1",
+    "langgraph>=1.2.19",
+    "lightgbm>=4.7.0",
+    "numpy>=2.5.4",
+    "pandas>=3.1.0",
+    "pydantic[email]>=2.14.2",
+    "pydantic-settings>=2.16.2",
+    "pyjwt>=2.15.1",
+    "python-multipart>=0.0.33",
+    "scikit-learn>=1.9.1",
+    "scipy>=1.18.1",
+    "sqlalchemy[asyncio]>=2.1.6",
+    "structlog>=26.1.0",
+    "uvicorn[standard]>=0.54.0",
+    "websockets>=17.4",
+    "openai>=1.60",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.2.0",
+    "pytest-asyncio>=1.4.1",
+    "respx>=0.23.1",
+    "ruff>=0.17.3",
+    "ta>=0.11.0",
+]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+testpaths = ["tests"]
+markers = ["live: hits real public exchange APIs (network required)"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "B", "UP", "I"]
+ignore = ["E501", "B008", "B904", "B905", "UP031"]

@@ -1,0 +1,41 @@
+# Local-first production-like stack: TimescaleDB (Postgres) + backend engine/API + frontend.
+services:
+  db:
+    image: timescale/timescaledb:2.22.1-pg17
+    environment:
+      POSTGRES_USER: aitrade
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: aitrade
+    volumes: [dbdata:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U aitrade"]
+      interval: 10s
+      retries: 10
+    restart: unless-stopped
+
+  backend:
+    build: ./backend
+    env_file: .env
+    environment:
+      AIT_ENV: prod
+      AIT_DATABASE_URL: postgresql+asyncpg://aitrade:${POSTGRES_PASSWORD}@db:5432/aitrade
+      AIT_CORS_ORIGINS: '["${PUBLIC_WEB_URL:-http://localhost:3100}"]'
+      AIT_MODEL_DIR: /app/data/models
+    volumes: [models:/app/data/models]
+    depends_on:
+      db: { condition: service_healthy }
+    ports: ["8100:8100"]
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        NEXT_PUBLIC_API_URL: ${PUBLIC_API_URL:-http://localhost:8100}
+    depends_on: [backend]
+    ports: ["3100:3100"]
+    restart: unless-stopped
+
+volumes:
+  dbdata:
+  models:

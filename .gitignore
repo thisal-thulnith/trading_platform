@@ -1,0 +1,12 @@
+.env
+.env.local
+**/.venv/
+**/node_modules/
+**/.next/
+**/.next-prod/
+backend/data/
+**/__pycache__/
+.pytest_cache/
+.ruff_cache/
+.DS_Store
+.qodo/
