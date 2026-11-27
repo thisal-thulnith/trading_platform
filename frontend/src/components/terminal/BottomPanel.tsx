@@ -7,6 +7,7 @@ import { useStore } from "@/lib/store";
 import type { SignalRow, Snapshot } from "@/lib/types";
 import { live } from "@/lib/ws";
 import { Pct, SignalPnl } from "@/components/ui/Pnl";
+import TakeSignal from "@/components/portfolio/TakeSignal";
 
 export default function BottomPanel({ signals, snap }: { signals: SignalRow[]; snap: Snapshot | null }) {
   const [tab, setTab] = useState("signals");
@@ -28,7 +29,7 @@ export default function BottomPanel({ signals, snap }: { signals: SignalRow[]; s
     if (tab === "flow") api(`/orderbook/${symbol}`).then(setBook).catch(() => setBook(null));
   }, [tab, token, symbol, timeframe]);
 
-  const TABS = [["signals", `Active signals (${signals.filter((s) => ["FORMING", "PRE_SIGNAL", "CONFIRMED", "ACTIVE"].includes(s.state)).length})`],
+  const TABS = [["signals", `Chart-scanner signals, Lab (${signals.filter((s) => ["FORMING", "PRE_SIGNAL", "CONFIRMED", "ACTIVE"].includes(s.state)).length})`],
     ["alerts", "Alerts"], ["flow", "Order flow"], ["positions", "Positions"], ["history", "Analysis history"], ["replay", "Replay"]];
   return (
     <div className="flex h-full flex-col">
@@ -38,9 +39,10 @@ export default function BottomPanel({ signals, snap }: { signals: SignalRow[]; s
       <div className="flex-1 overflow-auto text-[12px]">
         {tab === "signals" && (
           <table className="grid-t">
-            <thead><tr><th>Market</th><th>TF</th><th>Strategy</th><th>Dir</th><th>State</th><th>Entry</th><th>SL</th><th>TP1</th><th>Last</th><th>Live P&amp;L</th><th>Missing / outcome</th><th>Age</th></tr></thead>
+            <thead><tr><th>Market</th><th>TF</th><th>Strategy</th><th>Dir</th><th>State</th><th>Entry</th><th>SL</th><th>TP1</th><th>Last</th><th>Live P&amp;L</th><th>Missing / outcome</th><th>Age</th><th /></tr></thead>
             <tbody>
               {signals.filter((s) => ["FORMING", "PRE_SIGNAL", "CONFIRMED", "ACTIVE"].includes(s.state))
+                .filter((s, i, all) => all.findIndex((x) => x.symbol === s.symbol && x.timeframe === s.timeframe && x.strategy === s.strategy && x.direction === s.direction) === i)   // one row per setup
                 .sort((a, b) => (RANK[a.state] - RANK[b.state]) || b.created_at.localeCompare(a.created_at)).map((s) => (
                 <tr key={s.id} className="cursor-pointer" onClick={() => { setSymbol(s.symbol); setTimeframe(s.timeframe); }}>
                   <td className="text-slate-200">{pair(s.symbol)}</td><td>{s.timeframe}</td><td>{s.strategy}</td>
@@ -52,6 +54,9 @@ export default function BottomPanel({ signals, snap }: { signals: SignalRow[]; s
                   <td><SignalPnl s={s} /></td>
                   <td className="max-w-[260px] truncate text-slate-500">{s.summary?.blocked_reasons?.length ? "blocked: " + s.summary.blocked_reasons.join("; ") : (s.summary?.missing || []).join(", ")}</td>
                   <td className="text-slate-500"><Link href={`/signals/${s.id}`} onClick={(e) => e.stopPropagation()} className="text-sky-400">{ago(s.created_at)}</Link></td>
+                  <td onClick={(e) => e.stopPropagation()}>{s.stop && s.tp1 && (s.direction === "LONG" || s.direction === "SHORT") &&
+                    <TakeSignal symbol={s.symbol} side={s.direction} origin="lab" compact label="I took it"
+                      levels={{ entry: (s.entry_low + s.entry_high) / 2, stop: s.stop, target: s.tp1 }} />}</td>
                 </tr>
               ))}
             </tbody>

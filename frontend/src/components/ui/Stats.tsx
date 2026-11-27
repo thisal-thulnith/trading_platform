@@ -3,7 +3,7 @@ import { fmtNum } from "@/lib/format";
 export function Stat({ label, value, tone }: { label: string; value: React.ReactNode; tone?: "up" | "down" }) {
   return (
     <div className="card px-3 py-2">
-      <div className="text-[10px] uppercase tracking-wider text-slate-500">{label}</div>
+      <div className="text-[11px] font-medium text-slate-500">{label}</div>
       <div className={`num text-base ${tone === "up" ? "text-up" : tone === "down" ? "text-down" : "text-slate-100"}`}>{value}</div>
     </div>
   );

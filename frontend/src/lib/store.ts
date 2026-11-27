@@ -38,6 +38,8 @@ type State = {
   addChatObject: (o: ChartObject) => void;
   clearChatObjects: () => void;
   setLayer: (k: string, v: boolean) => void;
+  sidebar: boolean;
+  toggleSidebar: () => void;
   setReplay: (t: number | null) => void;
 };
 
@@ -56,11 +58,12 @@ const save = (k: string, v: any) => {
   } catch {}
 };
 
+// a clean chart by default: every analysis overlay starts hidden and is one click away in "Overlays"
 export const DEFAULT_LAYERS = {
-  order_block: true, breaker: true, mitigation_block: false, fvg: true, ifvg: true, liquidity_void: false,
-  structure_break: true, liquidity_sweep: true, buy_side_liquidity: true, sell_side_liquidity: true,
-  equal_highs: true, equal_lows: true, premium_zone: false, discount_zone: false, ote: false, inducement: true,
-  support_resistance: true, rising_support: true, falling_resistance: true, fibonacci: false, elliott: true, signals: true,
+  order_block: false, breaker: false, mitigation_block: false, fvg: false, ifvg: false, liquidity_void: false,
+  structure_break: false, liquidity_sweep: false, buy_side_liquidity: false, sell_side_liquidity: false,
+  equal_highs: false, equal_lows: false, premium_zone: false, discount_zone: false, ote: false, inducement: false,
+  support_resistance: false, rising_support: false, falling_resistance: false, fibonacci: false, elliott: false, signals: false,
 };
 
 export const useStore = create<State>((set, get) => ({
@@ -110,17 +113,24 @@ export const useStore = create<State>((set, get) => ({
   clearChatObjects: () => set({ chatObjects: [] }),
   setLayer: (k, v) => {
     const layers = { ...get().layers, [k]: v };
-    save("ait_layers", layers);
+    save("ait_layers_v2", layers);
     set({ layers });
   },
   setReplay: (replayAt) => set({ replayAt }),
+  sidebar: true,
+  toggleSidebar: () => {
+    const sidebar = !get().sidebar;
+    save("ait_sidebar", sidebar);
+    set({ sidebar });
+  },
 }));
 
 export function hydrateStore() {
   useStore.setState({
     symbol: persisted("ait_symbol", "BTCUSDT"),
     timeframe: persisted("ait_tf", "1h"),
-    layers: { ...DEFAULT_LAYERS, ...persisted("ait_layers", {}) },
+    layers: { ...DEFAULT_LAYERS, ...persisted("ait_layers_v2", {}) },
+    sidebar: typeof window !== "undefined" && window.innerWidth < 1024 ? false : persisted("ait_sidebar", true),   // phones start with the page
     token: (() => {
       try {
         return localStorage.getItem("ait_token");

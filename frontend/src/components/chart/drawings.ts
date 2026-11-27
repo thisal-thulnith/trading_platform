@@ -10,6 +10,21 @@ export type VolumeProfile = { bins: { price_low: number; price_high: number; vol
 
 const FONT = "11px ui-sans-serif, system-ui, -apple-system";
 
+/** Colours readable on the light chart: very light lines (white, pale yellow, slate-200) are darkened, since the
+ *  chart objects from the engine and the agents were picked for a dark background. */
+export function ink(color: string): string {
+  const m = /^#([0-9a-f]{6})([0-9a-f]{2})?$/i.exec(color);
+  if (!m) return color;
+  const n = parseInt(m[1], 16);
+  const [r, g, b] = [n >> 16, (n >> 8) & 255, n & 255];
+  const lum = (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255;
+  if (lum > 0.82) return "#3a3a3c" + (m[2] ?? "");
+  if (lum < 0.62) return color;
+  const k = 0.62 / lum; // darken toward the same hue until it reads on white
+  const h = (v: number) => Math.round(v * k).toString(16).padStart(2, "0");
+  return `#${h(r)}${h(g)}${h(b)}${m[2] ?? ""}`;
+}
+
 function withAlpha(color: string, a: number): string {
   if (color.startsWith("#") && (color.length === 7 || color.length === 9)) {
     const hex = color.slice(0, 7);
@@ -111,16 +126,16 @@ class Renderer implements IPrimitivePaneRenderer {
     if (!text) return;
     const w = ctx.measureText(text).width + 8;
     if (bg) {
-      ctx.fillStyle = "rgba(9,12,20,0.78)";
+      ctx.fillStyle = "rgba(255,255,255,0.9)";
       ctx.fillRect(x, y - 13, w, 15);
     }
-    ctx.fillStyle = color;
+    ctx.fillStyle = ink(color);
     ctx.fillText(text, x + 4, y - 2);
   }
 
   drawObject(ctx: CanvasRenderingContext2D, o: ChartObject, W: number, bold: boolean) {
     const g = this.layer.geo;
-    const color = o.color || "#38bdf8";
+    const color = ink(o.color || "#0071e3");
     ctx.lineWidth = bold ? 2 : 1;
     ctx.strokeStyle = color;
     switch (o.kind) {
@@ -151,7 +166,11 @@ class Renderer implements IPrimitivePaneRenderer {
         ctx.lineTo(W, y);
         ctx.stroke();
         ctx.setLineDash([]);
-        this.label(ctx, o.label, Math.max(W - ctx.measureText(o.label || "").width - 70, x1), y, color);
+        const tw = ctx.measureText(o.label || "").width + 12;
+        // keep the label on screen: right side when it fits after the line's start, else just inside the edge
+        const planLine = o.concept === "plan" || o.concept === "liquidation";
+        const lx = planLine && x1 > tw + 10 ? x1 - tw - 6 : Math.max(0, Math.min(Math.max(W - tw - 70, x1), W - tw - 4));
+        this.label(ctx, o.label, lx, y, color);
         return;
       }
       case "vline": {
@@ -216,7 +235,7 @@ class Renderer implements IPrimitivePaneRenderer {
           ctx.beginPath();
           ctx.arc(p.x!, p.y!, 9, 0, Math.PI * 2);
           ctx.fill();
-          ctx.fillStyle = "#0b0f19";
+          ctx.fillStyle = "#ffffff";
           ctx.font = "bold 10px ui-sans-serif";
           ctx.fillText(p.l, p.x! - ctx.measureText(p.l).width / 2, p.y! + 3.5);
           ctx.font = FONT;
@@ -272,7 +291,7 @@ class Renderer implements IPrimitivePaneRenderer {
         ctx.fillRect(x1, Math.min(ye, yt), x2 - x1, Math.abs(yt - ye));
         ctx.fillStyle = "rgba(239,68,68,0.16)";
         ctx.fillRect(x1, Math.min(ye, ys), x2 - x1, Math.abs(ys - ye));
-        ctx.strokeStyle = "#e2e8f0";
+        ctx.strokeStyle = "#3a3a3c";
         ctx.beginPath();
         ctx.moveTo(x1, ye);
         ctx.lineTo(x2, ye);
@@ -284,7 +303,7 @@ class Renderer implements IPrimitivePaneRenderer {
           const pct = ((o.direction === "SHORT" ? -1 : 1) * (lp - o.entry!)) / o.entry! * 100;
           live = `  ·  now ${pct >= 0 ? "+" : ""}${pct.toFixed(2)}%`;
         }
-        this.label(ctx, `${o.label || o.direction} R:R ${rr.toFixed(2)}${live}`, x1 + 2, Math.min(ye, yt, ys) - 2, "#e2e8f0");
+        this.label(ctx, `${o.label || o.direction} R:R ${rr.toFixed(2)}${live}`, x1 + 2, Math.min(ye, yt, ys) - 2, "#1d1d1f");
         return;
       }
     }
@@ -292,7 +311,7 @@ class Renderer implements IPrimitivePaneRenderer {
 
   drawHandles(ctx: CanvasRenderingContext2D, o: ChartObject) {
     for (const [, x, y] of this.layer.handles(o)) {
-      ctx.fillStyle = "#0b0f19";
+      ctx.fillStyle = "#ffffff";
       ctx.strokeStyle = "#facc15";
       ctx.lineWidth = 1.5;
       ctx.fillRect(x - 4, y - 4, 8, 8);

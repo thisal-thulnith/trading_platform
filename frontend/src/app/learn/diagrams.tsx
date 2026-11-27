@@ -1,5 +1,5 @@
 /* Simple explanatory SVG diagrams (not market data). */
-const G = "#22c55e", R = "#ef4444", T = "#94a3b8", B = "#38bdf8", A = "#f59e0b";
+const G = "#1a9b48", R = "#e0342b", T = "#6e6e73", B = "#0071e3", A = "#d97706";
 
 function Frame({ children, h = 170 }: { children: React.ReactNode; h?: number }) {
   return <svg viewBox={`0 0 520 ${h}`} className="my-3 w-full max-w-[560px] rounded border border-line bg-panel2">{children}</svg>;
@@ -14,7 +14,7 @@ export function Diagram({ name }: { name: string }) {
   switch (name) {
     case "candle":
       return (<Frame><Candle x={150} o={120} c={60} h={30} l={145} w={34} /><Candle x={360} o={60} c={120} h={30} l={145} w={34} />
-        {[["High", 30], ["Close", 60], ["Open", 120], ["Low", 145]].map(([t, y]) => <g key={t as string}><line x1={175} x2={215} y1={y as number} y2={y as number} stroke="#334155" strokeDasharray="3 3" /><Txt x={220} y={(y as number) + 4}>{t}</Txt></g>)}
+        {[["High", 30], ["Close", 60], ["Open", 120], ["Low", 145]].map(([t, y]) => <g key={t as string}><line x1={175} x2={215} y1={y as number} y2={y as number} stroke="#d2d2d7" strokeDasharray="3 3" /><Txt x={220} y={(y as number) + 4}>{t}</Txt></g>)}
         <Txt x={150} y={165} a="middle" c={G}>bullish (close &gt; open)</Txt><Txt x={360} y={165} a="middle" c={R}>bearish (close &lt; open)</Txt>
         <Txt x={385} y={40}>upper wick</Txt><Txt x={385} y={95}>body</Txt><Txt x={385} y={140}>lower wick</Txt></Frame>);
     case "structure":
@@ -44,16 +44,16 @@ export function Diagram({ name }: { name: string }) {
       return (<Frame><rect x={60} y={20} width={300} height={65} fill="#ef444418" /><rect x={60} y={85} width={300} height={65} fill="#22c55e18" />
         <rect x={60} y={111} width={300} height={22} fill="#a855f730" /><line x1={60} x2={360} y1={85} y2={85} stroke={T} strokeDasharray="4 3" />
         <polyline points="70,150 200,20 300,120" fill="none" stroke={B} strokeWidth={2} />
-        <Txt x={370} y={55} c={R}>Premium (expensive) — sell area</Txt><Txt x={370} y={89}>Equilibrium 50%</Txt><Txt x={370} y={126} c="#c084fc">OTE 62–79%</Txt><Txt x={370} y={146} c={G}>Discount (cheap) — buy area</Txt></Frame>);
+        <Txt x={370} y={55} c={R}>Premium (expensive) — sell area</Txt><Txt x={370} y={89}>Equilibrium 50%</Txt><Txt x={370} y={126} c="#7c3aed">OTE 62–79%</Txt><Txt x={370} y={146} c={G}>Discount (cheap) — buy area</Txt></Frame>);
     case "elliott":
       return (<Frame h={180}><polyline points="20,160 80,100 110,130 210,40 240,75 300,20 340,80 370,55 420,120" fill="none" stroke={B} strokeWidth={2} />
         {[[80, 100, "1"], [110, 130, "2"], [210, 40, "3"], [240, 75, "4"], [300, 20, "5"], [340, 80, "A"], [370, 55, "B"], [420, 120, "C"]].map(([x, y, l]) => (
-          <g key={l as string}><circle cx={x as number} cy={y as number} r={9} fill={B} /><Txt x={x} y={(y as number) + 4} a="middle" c="#0b0f19" s={10}>{l}</Txt></g>))}
+          <g key={l as string}><circle cx={x as number} cy={y as number} r={9} fill={B} /><Txt x={x} y={(y as number) + 4} a="middle" c="#ffffff" s={10}>{l}</Txt></g>))}
         <line x1={80} x2={300} y1={100} y2={100} stroke={R} strokeDasharray="3 3" /><Txt x={440} y={104} c={R}>wave 4 must stay above wave 1 top</Txt>
         <Txt x={20} y={175}>Impulse 1-2-3-4-5 with the trend, then correction A-B-C.</Txt></Frame>);
     case "rr":
       return (<Frame><rect x={120} y={30} width={260} height={60} fill="#22c55e26" /><rect x={120} y={90} width={260} height={30} fill="#ef444426" />
-        <line x1={120} x2={380} y1={90} y2={90} stroke="#e2e8f0" /><Txt x={390} y={34} c={G}>Target +2R ($20)</Txt><Txt x={390} y={94}>Entry</Txt><Txt x={390} y={124} c={R}>Stop −1R ($10)</Txt>
+        <line x1={120} x2={380} y1={90} y2={90} stroke="#3a3a3c" /><Txt x={390} y={34} c={G}>Target +2R ($20)</Txt><Txt x={390} y={94}>Entry</Txt><Txt x={390} y={124} c={R}>Stop −1R ($10)</Txt>
         <Txt x={20} y={150}>$1,000 account × 1% risk = $10 at risk. Size = $10 ÷ (entry − stop).</Txt></Frame>);
     default:
       return null;

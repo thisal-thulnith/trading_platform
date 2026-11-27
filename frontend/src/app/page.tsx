@@ -1,6 +1,6 @@
 "use client";
-import Desk from "@/components/desk/Desk";
+import Home from "@/components/home/Home";
 
-export default function Home() {
-  return <Desk />;
+export default function HomePage() {
+  return <Home />;
 }

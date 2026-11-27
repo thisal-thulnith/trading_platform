@@ -61,6 +61,26 @@ class Settings(BaseSettings):
     openai_api_key: str | None = None
     openai_model: str = "gpt-5.5"
     llm_provider: str = "auto"  # auto | anthropic | openai
+    # $ per 1M tokens for the cost estimate (empty: the list price in app/agents/costs.py for the model in use)
+    llm_price_input: float | None = None
+    llm_price_cached: float | None = None
+    llm_price_output: float | None = None
+    # Research desk: each lead agent runs its specialist sub-agents first (about 3x the AI calls of the leads alone)
+    desk_subagents: bool = True
+    desk_llm_concurrency: int = 6  # AI calls in flight at once across the desk (keeps bursts under rate limits)
+    desk_ready_gate: bool = True   # run the AI only when the free readiness check finds a trade-quality setup
+    readiness_watch: bool = True   # re-check the shortlist every 15 min and alert when a coin turns ready
+    desk_sub_model: str | None = None  # a cheaper model for the 20 specialists (empty: the main model)
+    desk_head_votes: int = 1       # >1: Apex decides that many times and the majority wins (a split means WAIT)
+    # Plans (app/plans.py). anonymous_plan applies when nobody is logged in: "desk" for a self-hosted install (the owner
+    # is not locked out of their own platform); set AIT_ANONYMOUS_PLAN=starter for a public deployment.
+    plans_enforced: bool = False   # packages are built but off: turn on before selling plans
+    # Order-book and trade recorder (app/quant/lob). Off by default: it streams continuously (about 11 GB a day of
+    # download for 20 coins at 500 ms; 24 GB at 100 ms) and stores ~2 GB a month under a 3 GB cap.
+    lob_record: bool = False
+    lob_top_n: int = 20
+    lob_depth_speed: str = "500ms"
+    anonymous_plan: str = "desk"
 
     # Notifications (optional)
     telegram_bot_token: str | None = None

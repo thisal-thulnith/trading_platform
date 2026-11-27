@@ -43,7 +43,6 @@ export default function MarketList() {
       <div className="flex-1 overflow-auto">
         {list.map((r) => {
           const p = prices[r.symbol] ?? r.price;
-          const best = r.radar?.["1h"]?.best || r.radar?.["4h"]?.best || r.radar?.["15m"]?.best;
           return (
             <div key={r.symbol} onClick={() => setSymbol(r.symbol)}
               className={`group cursor-pointer border-b border-line/50 px-2 py-1.5 ${r.symbol === symbol ? "bg-sky-500/10" : "hover:bg-white/5"}`}>
@@ -58,11 +57,6 @@ export default function MarketList() {
               </div>
               <div className="flex items-center text-[11px]">
                 <span className="text-slate-500">{fmtCompact(r.quote_volume_24h)}</span>
-                {best && (
-                  <span className={`ml-2 chip ${best.stage === "confirmed" && best.passed ? "bg-violet-500/20 text-violet-300" : best.stage === "pre_signal" ? "bg-amber-500/10 text-amber-300" : "bg-sky-500/10 text-sky-300"}`}>
-                    {best.direction[0]} {best.stage.replace("_", "-")}
-                  </span>
-                )}
                 <span className={`num ml-auto ${(r.change_24h_pct ?? 0) >= 0 ? "text-up" : "text-down"}`}>{fmtPct(r.change_24h_pct)}</span>
               </div>
             </div>

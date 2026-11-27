@@ -1,5 +1,5 @@
 "use client";
-import { ChevronLeft, ChevronRight, GraduationCap, Pause, Play, Sparkles, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, GraduationCap, MessageSquareText, Pause, Play, X } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
@@ -107,14 +107,14 @@ export default function Walkthrough({ onClose }: { onClose: () => void }) {
           <div className="space-y-3">
             <div className="text-[12px] text-slate-400">How a human analyst reads {walk.symbol} — starting from {walk.higher_timeframes.join(" & ") || "this timeframe"}, then zooming in to {walk.timeframe}. The chart shows only what each step talks about.</div>
             <div className={`rounded border p-3 ${VERDICT_STYLE[syn.direction]}`}>
-              <div className="text-[11px] uppercase tracking-wider opacity-80">Overall read</div>
+              <div className="text-[12px] font-medium opacity-80">Chart scanner&apos;s read (Lab, not the main signal: see the Signal tab)</div>
               <div className="text-lg font-semibold">{syn.direction.toUpperCase()} · {syn.confidence} confidence</div>
-              <div className="text-[12px] opacity-90">{Math.round(syn.agreement * 100)}% of weighted evidence agrees · decision: <b>{walk.decision.action.replace("_", " ")}</b></div>
+              <div className="text-[12px] opacity-90">{Math.round(syn.agreement * 100)}% of weighted evidence agrees · scanner call: <b>{walk.decision.action.replace("_", " ")}</b></div>
             </div>
             <ul className="space-y-1 text-[13px] leading-relaxed text-slate-200">{syn.story.map((x) => <li key={x}>• {x}</li>)}</ul>
             {walk.narrative && <div className="prose-sm rounded bg-panel2 p-2 text-[13px] text-slate-200"><ReactMarkdown>{walk.narrative}</ReactMarkdown></div>}
             {walk.llm_configured && !walk.narrative && (
-              <button onClick={narrate} disabled={narrating} className="btn flex items-center gap-1"><Sparkles size={13} />{narrating ? "writing…" : "AI analyst commentary"}</button>
+              <button onClick={narrate} disabled={narrating} className="btn flex items-center gap-1"><MessageSquareText size={13} />{narrating ? "writing…" : "AI analyst commentary"}</button>
             )}
             <div className="grid grid-cols-1 gap-1">
               {walk.steps.map((st, k) => (
@@ -133,13 +133,13 @@ export default function Walkthrough({ onClose }: { onClose: () => void }) {
             </div>
             {basics && (
               <div className="rounded border border-sky-500/20 bg-sky-500/5 p-2 text-[12.5px] leading-relaxed text-sky-100/90">
-                <div className="mb-0.5 text-[10px] font-semibold uppercase tracking-wider text-sky-400">The concept</div>
+                <div className="mb-0.5 text-[11px] font-semibold text-sky-400">The concept</div>
                 {s.plain}
                 <Link href={`/learn#${s.learn}`} className="ml-1 text-sky-400 underline">Learn more →</Link>
               </div>
             )}
             <div>
-              <div className="mb-0.5 text-[10px] font-semibold uppercase tracking-wider text-slate-500">What I see on {walk.symbol}</div>
+              <div className="mb-0.5 text-[11px] font-semibold text-slate-500">What I see on {walk.symbol}</div>
               <p className="text-[13.5px] leading-relaxed text-slate-100">{s.observation}</p>
             </div>
             {s.bullets.length > 0 && (

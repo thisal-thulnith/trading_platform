@@ -44,8 +44,10 @@ def liq_distance(leverage: float, symbol: str) -> float:
     return 1 / leverage - mmr(symbol)
 
 
-def liquidation_price(entry: float, leverage: float, symbol: str) -> float:
-    return entry * (1 - liq_distance(leverage, symbol))
+def liquidation_price(entry: float, leverage: float, symbol: str, side: str = "LONG") -> float:
+    """Isolated position: a long is liquidated about 1/leverage below entry, a short the same distance above."""
+    d = liq_distance(leverage, symbol)
+    return entry * (1 + d) if side == "SHORT" else entry * (1 - d)
 
 
 def safe_leverage(stop_pct: float, symbol: str) -> int:

@@ -120,6 +120,9 @@ def _fallback_view(reason: str) -> dict:
 
 
 async def _run(run: dict, agents: list[tuple], tools: list, cards: dict[str, dict], context: str) -> None:
+    from app.agents import costs
+
+    costs.FEATURE.set("intel")
     async with _sem:
         t0 = time.time()
         said: list[str] = []
@@ -171,10 +174,16 @@ async def _run(run: dict, agents: list[tuple], tools: list, cards: dict[str, dic
                  tool_calls=run["tool_calls"], seconds=run["seconds"], error=run.get("error"))
 
 
-def _start(key: str, kind: str, agents: list[tuple], tools: list, cards: dict, context: str) -> dict:
+def _idle() -> dict:
+    return {"status": "idle", "agents": [], "top_coins": [], "tool_calls": 0, "error": None}
+
+
+def _start(key: str, kind: str, agents: list[tuple], tools: list, cards: dict, context: str, start: bool = True) -> dict:
     run = _runs.get(key)
     if run and (run["status"] == "running" or desk_tools.fresh(run["t"], CACHE_S)):
         return _view(run)
+    if not start:   # the user's rule: AI never runs by itself (it spends their credits); a button sends start=True
+        return _idle()
     if provider() is None:
         return _fallback_view("no LLM key configured (AIT_OPENAI_API_KEY or AIT_ANTHROPIC_API_KEY)")
     s = get_settings()
@@ -186,7 +195,7 @@ def _start(key: str, kind: str, agents: list[tuple], tools: list, cards: dict, c
     return _view(run)
 
 
-def system_desk(acct: dict, frames: dict, filters: dict | None, funding: dict | None) -> dict:
+def system_desk(acct: dict, frames: dict, filters: dict | None, funding: dict | None, start: bool = False) -> dict:
     """Start (or return) the intelligent system desk for this account view."""
     key = _key("system", (acct["as_of"], acct["mode"], acct["venue"], acct["rules"]["capital"],
                           (acct.get("futures") or {}).get("leverage_requested")))
@@ -197,10 +206,11 @@ def system_desk(acct: dict, frames: dict, filters: dict | None, funding: dict | 
     tools = desk_tools.build_tools(acct, frames, cards, filters=filters, funding=funding)
     ctx = (f"data as of {acct['as_of']} (last finished daily candle); risk mode {acct['mode']}; venue {acct['venue']}; "
            f"budget ${acct['rules']['capital']:,.0f}; paper account only.")
-    return _start(key, "system", SYSTEM_AGENTS, tools, cards, ctx)
+    return _start(key, "system", SYSTEM_AGENTS, tools, cards, ctx, start)
 
 
-def portfolio_desk(acct: dict, frames: dict, portfolio: dict, filters: dict | None, funding: dict | None) -> dict:
+def portfolio_desk(acct: dict, frames: dict, portfolio: dict, filters: dict | None, funding: dict | None,
+                   start: bool = False) -> dict:
     """Start (or return) the intelligent portfolio desk (Planner, Position Manager, Coach)."""
     sig = [(c["id"], c.get("partial_done"), c.get("stop")) for c in portfolio["open"]] + [c["id"] for c in portfolio["closed"]]
     p = portfolio["budget_plan"]
@@ -213,4 +223,4 @@ def portfolio_desk(acct: dict, frames: dict, portfolio: dict, filters: dict | No
     ctx = (f"data as of {acct['as_of']}; the user's budget ${p['budget_usd']:,.0f}, mode {p['mode']}, venue {p['venue']}, "
            f"wanted leverage {p['leverage_wanted']}x; {len(portfolio['open'])} open and {len(portfolio['closed'])} closed "
            f"recorded trades. The platform never places orders; the user does.")
-    return _start(key, "portfolio", PORTFOLIO_AGENTS, tools, cards, ctx)
+    return _start(key, "portfolio", PORTFOLIO_AGENTS, tools, cards, ctx, start)

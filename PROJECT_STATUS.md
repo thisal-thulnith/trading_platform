@@ -21,6 +21,17 @@ cd backend && uv run pytest -q                             # tests
 ```
 Port 8000 was already used by another app on the dev machine, so the project uses **8100** (API) and **3100** (web).
 
+## New in 0.21 (2026-11-11)
+- Named leads with specialist teams (Atlas, Vega, Tide, Ledger, Raven, Sentinel, Verity, Apex; 20 specialists) and a
+  Fundamentals team with live CoinGecko/DefiLlama data. Tests pass with a scripted LLM; **not yet run end to end with a
+  real model** because the OpenAI key is expired — renew it and run one analysis to check prompts, cost and timing.
+
+## New in 0.15 (verified live, 2026-11-10)
+- Home is the **Research desk** (`frontend/src/components/desk/ResearchDesk.tsx`, `backend/app/agents/research_desk.py`): research → analysis → debate → plan → decision, real tools, plan numbers from `app/risk/plan.py`.
+- Add-trade form gets the full plan from the agents (`POST /api/agent/plan`). Shorts supported in My trades (futures only).
+- Unused pages archived in `frontend/archive/` (see its README to restore one).
+- **The OpenAI key in backend/.env has expired** (2026-11-10): agents run rule-based until the user renews it.
+
 ## New in 0.2 (verified in browser)
 - Guided step-by-step analysis with chart focus mode, synthesis, scenarios and confidence (`app/analysis/walkthrough.py`, `frontend/src/components/terminal/Walkthrough.tsx`).
 - Learn page (`frontend/src/app/learn/`).

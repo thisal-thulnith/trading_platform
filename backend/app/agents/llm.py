@@ -13,6 +13,7 @@ import time
 import anthropic
 import openai
 
+from app.agents import costs
 from app.config import get_settings
 from app.logging import log
 
@@ -70,6 +71,32 @@ def openai_client() -> openai.AsyncOpenAI | None:
     return openai.AsyncOpenAI(api_key=s.openai_api_key, max_retries=2, timeout=90.0)
 
 
+_PROBE = {"t": 0.0}
+
+
+async def probe(max_age_s: float = 600) -> dict:
+    """Check the key without spending tokens (a model lookup is free), at most every `max_age_s`, so the pages can say
+    "AI unavailable" before anyone presses Analyse. Real calls keep STATUS current in between."""
+    p = provider()
+    if p is None or time.time() - _PROBE["t"] < max_age_s:
+        return status()
+    _PROBE["t"] = time.time()
+    s = get_settings()
+    try:
+        if p == "openai":
+            await openai_client().models.retrieve(s.openai_model)
+        else:
+            await client().models.retrieve(s.llm_model)
+        # a model lookup only proves the KEY works; it can't see a billing problem. Keep a recent "no credits" /
+        # quota error until a real AI call succeeds, so the pages don't say "AI ready" when calls would fail.
+        err = (STATUS.get("error") or "").lower()
+        if not any(w in err for w in ("credit", "quota", "billing", "insufficient")):
+            note_success()
+    except Exception as e:  # noqa: BLE001 - any failure here is exactly what the pages need to show
+        note_failure(str(e))
+    return status()
+
+
 async def complete(system: str, user: str, max_tokens: int = 4000, json_mode: bool = False) -> str | None:
     """One-shot text completion on whichever provider is configured. json_mode asks OpenAI for a JSON object
     (Claude is instructed in the prompt; callers parse defensively either way)."""
@@ -84,6 +111,7 @@ async def complete(system: str, user: str, max_tokens: int = 4000, json_mode: bo
             note_failure(str(e))
             return None
         note_success()
+        costs.track_openai(r, get_settings().openai_model)
         return (r.choices[0].message.content or "").strip() or None
     c = client()
     if c is None:
@@ -97,6 +125,7 @@ async def complete(system: str, user: str, max_tokens: int = 4000, json_mode: bo
         note_failure(str(e))
         return None
     note_success()
+    costs.track_anthropic(r, get_settings().llm_model)
     if r.stop_reason == "refusal":
         return None
     return "".join(b.text for b in r.content if b.type == "text").strip() or None
@@ -112,9 +141,9 @@ def compact_reports(reports: dict) -> dict:
     return keep
 
 
-async def create(c: anthropic.AsyncAnthropic, **kw):
+async def create(c: anthropic.AsyncAnthropic, model: str | None = None, **kw):
     s = get_settings()
-    return await c.beta.messages.create(model=s.llm_model, betas=[FALLBACK_BETA], fallbacks="default",
+    return await c.beta.messages.create(model=model or s.llm_model, betas=[FALLBACK_BETA], fallbacks="default",
                                         output_config={"effort": s.llm_effort}, **kw)
 
 
