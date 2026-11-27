@@ -1,5 +1,6 @@
 "use client";
 import { fmtPrice, pair } from "@/lib/format";
+import TakeSignal from "@/components/portfolio/TakeSignal";
 
 const usd = (v: number | null | undefined) => (v === null || v === undefined || !isFinite(v) ? "—" : `$${Math.abs(v).toFixed(2)}`);
 
@@ -24,7 +25,7 @@ export default function SystemSignalCard({ s, onSelect }: { s: any; onSelect: ()
     <div className={`card border-l-2 p-3 text-[12px] ${border}`}>
       <div className="flex flex-wrap items-center gap-2">
         <span className="font-semibold text-slate-100">{pair(s.symbol)}</span>
-        <span className="chip bg-white/5 text-slate-300">{s.venue === "futures" ? `Perp · Isolated ${s.leverage ?? a.safe_leverage ?? 1}×` : "Spot"}</span>
+        <span className="chip bg-white/5 text-slate-300">{s.venue === "futures" ? "Perp · Isolated" : "Spot"}</span>
         <span className="chip bg-emerald-500/10 text-emerald-300">LONG</span>
         <span className={`chip ${chip}`}>{label}</span>
         {a.quant && <span className="ml-auto text-slate-500">trend rank {a.quant.rank} of {a.quant.of}</span>}
@@ -57,8 +58,11 @@ export default function SystemSignalCard({ s, onSelect }: { s: any; onSelect: ()
       {s.warnings?.length > 0 && <div className="mt-1 text-amber-200">{s.warnings.join(" ")}</div>}
       {s.why && <div className={`mt-1 ${s.state === "skipped" ? "text-amber-200" : "text-slate-400"}`}>{s.why}</div>}
       <div className="mt-2 flex items-center gap-2">
+        {planned && s.stop && s.target && (
+          <TakeSignal symbol={s.symbol} side="LONG" origin="lab" compact label="I took it"
+            levels={{ entry: s.entry_ref, stop: s.stop, target: s.target }} />)}
         {s.selectable ? (
-          <button className="btn btn-primary" onClick={onSelect}>Select this trade — I&apos;m taking it</button>
+          <button className="btn btn-primary" onClick={onSelect}>Select — the agents size it (leverage, margin, risk)</button>
         ) : (
           <span className="text-slate-500">
             {s.state === "near" ? "Not selectable yet: the rule waits for the daily close above the level." :

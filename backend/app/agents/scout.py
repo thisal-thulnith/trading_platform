@@ -20,9 +20,11 @@ from app.logging import log
 from app.strategies.exits import apply_exit_profile
 
 STABLE = {"USDC", "FDUSD", "TUSD", "USDP", "DAI", "BUSD", "EUR", "AEUR", "EURI", "USDE", "USD1", "PYUSD", "XUSD",
-          "BFUSD", "RLUSD", "UST", "USTC", "PAXG", "WBTC", "WBETH", "BNSOL", "GBP", "TRY", "BRL"}
+          "BFUSD", "RLUSD", "UST", "USTC", "PAXG", "WBTC", "WBETH", "BNSOL", "GBP", "TRY", "BRL", "U", "USDT0",
+          "USDS", "FRAX", "LUSD", "GUSD"}
 MIN_QUOTE_VOL = 2_000_000  # USDT traded in 24h; thinner books make every level unreliable
-CACHE_S = 300
+CACHE_S = 900  # the shortlist is refreshed every 15 minutes, not on every page view
+DEEP_N = 20     # coins analysed in depth besides the streamed universe (was 150: too many API calls)
 
 _coins: tuple[float, list[dict]] | None = None
 _fresh: dict[tuple[str, str], float] = {}
@@ -188,7 +190,7 @@ async def _run(tf: str, deep_n: int) -> None:
         job["error"] = str(e)
 
 
-def scan_state(tf: str, deep_n: int = 150, refresh: bool = False) -> dict:
+def scan_state(tf: str, deep_n: int = DEEP_N, refresh: bool = False) -> dict:
     """Start (or reuse) the scan for a timeframe and report progress / the latest result."""
     job = JOBS.get(tf)
     stale = not job or job["status"] == "error" or (

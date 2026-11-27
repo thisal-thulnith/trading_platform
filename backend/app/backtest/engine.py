@@ -57,7 +57,9 @@ def resample_closed(df: pd.DataFrame, base_tf: str, htf: str) -> pd.DataFrame:
     return agg.reset_index()
 
 
-def generate_setups(df: pd.DataFrame, symbol: str, cfg: BacktestConfig, progress=None) -> list[dict]:
+def generate_setups(df: pd.DataFrame, symbol: str, cfg: BacktestConfig, progress=None, extras=None) -> list[dict]:
+    """`extras(snap, candidate) -> dict`, if given, adds fields from the same as-of snapshot to each recorded setup
+    (used by the meta-labeling research to keep HTF trend and level context without re-running the analysis)."""
     setups = []
     seen: set[str] = set()
     step_ms = tf_ms(cfg.timeframe)
@@ -85,6 +87,8 @@ def generate_setups(df: pd.DataFrame, symbol: str, cfg: BacktestConfig, progress
                            "stop": c["stop"], "targets": c["targets"], "expiry_bars": c["expiry_bars"],
                            "hold_bars": c["expected_hold_bars"], "regime": snap["regime"]["regime"],
                            "quality": c["validation"]["quality_score"], "bias": snap["confluence"]["bias"]})
+            if extras is not None:
+                setups[-1].update(extras(snap, c))
         if progress and t % 100 == 0:
             progress(t / n)
     return setups

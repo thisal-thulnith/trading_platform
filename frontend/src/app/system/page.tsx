@@ -6,6 +6,7 @@ import { OpenCard, useTradeActions } from "@/components/MyTrades";
 import SystemSignalCard from "@/components/SystemSignalCard";
 import TakeTrade, { nextDailyOpen, type TradeDraft } from "@/components/TakeTrade";
 import Spark from "@/components/ui/Spark";
+import { Card, LabBanner, More, Note, Page, PageHead } from "@/components/ui/Page";
 import { Stat } from "@/components/ui/Stats";
 import { api } from "@/lib/api";
 import { fmtPrice, pair } from "@/lib/format";
@@ -16,14 +17,13 @@ const tone = (v: number) => (v > 0 ? "up" : v < 0 ? "down" : undefined);
 const pct = (v: number | null | undefined) => (v === null || v === undefined ? "—" : `${v > 0 ? "+" : ""}${v.toFixed(1)}%`);
 const rr = (v: number | null | undefined) => (v === null || v === undefined ? "—" : `${v > 0 ? "+" : ""}${v.toFixed(2)}R`);
 const PERIODS = ["train 2020-23", "valid 2024", "TEST 2025-now"];
-const LEVERAGES = [1, 2, 3, 5, 10, 20, 25, 50, 75, 100, 125];
 const wins = (row: any) => PERIODS.map((p) => (row[p]?.n ? `${(row[p].win * 100).toFixed(0)}%` : "—")).join(" / ");
 const avgs = (row: any) => PERIODS.map((p) => (row[p]?.n ? rr(row[p].E) : "—")).join(" / ");
 
 function Table({ head, rows }: { head: string[]; rows: React.ReactNode[][] }) {
   return (
     <table className="w-full text-[12px]">
-      <thead className="text-left text-[10px] uppercase tracking-wider text-slate-500">
+      <thead className="text-left text-[11px] font-medium text-slate-500">
         <tr>{head.map((h) => <th key={h} className="px-2 py-1.5">{h}</th>)}</tr>
       </thead>
       <tbody>
@@ -39,7 +39,7 @@ export default function SystemAccount() {
   const [capital, setCapital] = useState(100);
   const [mode, setMode] = useState("conservative");
   const [venue, setVenue] = useState("spot");
-  const [leverage, setLeverage] = useState(20);
+  const leverage = 1; // tickets need no leverage at the system size; the agents set it per trade when you select one
   const [capText, setCapText] = useState("100");
   const [take, setTake] = useState<TradeDraft | null>(null);
   const [d, setD] = useState<any>(null);
@@ -52,7 +52,8 @@ export default function SystemAccount() {
     [q],
   );
   useEffect(() => { load(); const i = setInterval(load, 60_000); return () => clearInterval(i); }, [load]);
-  const intel = useDesk(d ? `/system/desk?${q}` : null);
+  const [runAi, setRunAi] = useState(false);
+  const intel = useDesk(d ? `/system/desk?${q}${runAi ? "&run=true" : ""}` : null);
   // the user's own running trades, shown next to the signal cards so a selected card becomes a running card here
   const loadMine = useCallback(
     () => api(`/my/portfolio?budget=${capital}&mode=${mode}&venue=${venue}&leverage=${leverage}`).then(setMine).catch(() => {}),
@@ -60,8 +61,9 @@ export default function SystemAccount() {
   );
   useEffect(() => { loadMine(); const i = setInterval(loadMine, 30_000); return () => clearInterval(i); }, [loadMine]);
   const act = useTradeActions(loadMine);
-  const takeSignal = (s: any) => setTake({ symbol: s.symbol, venue: s.venue, leverage: s.venue === "futures" ? (s.leverage ?? 1) : 1, entry: s.entry_ref,
-    qty: s.qty, stop: s.stop, target: s.target, budget_usd: capital, mode, source: "system", opened_at: nextDailyOpen() });
+  // the card keeps its own levels; the agents size it: leverage, margin, quantity and risk for this budget
+  const takeSignal = (s: any) => setTake({ symbol: s.symbol, side: "LONG", venue: s.venue, leverage: 1, entry: s.entry_ref,
+    qty: s.qty, stop: s.stop, target: s.target, budget_usd: capital, mode, source: "system", opened_at: nextDailyOpen(), tf: "1d" });
 
   const a = d?.account;
   const r = d?.rules;
@@ -71,29 +73,17 @@ export default function SystemAccount() {
   const liqOf = (sym: string) => fu?.open?.find((x: any) => x.symbol === sym);
   const aiTop = intel?.status === "ready" && intel.top_coins?.length > 0;
   return (
-    <div className="h-full space-y-3 overflow-auto p-4">
-      <div className="flex flex-wrap items-end gap-3">
-        <div>
-          <h1 className="text-lg font-semibold text-slate-100">System account</h1>
-          <p className="max-w-3xl text-[12px] text-slate-500">
-            {futures
-              ? `The same trades written as Binance USDⓈ-M tickets for a ${usd(capital)} account. The system sizes every trade by risk; leverage only sets the margin and the liquidation price, and it is capped per trade so the stop — not a liquidation — closes a loser. You place the orders yourself; nothing is sent to Binance.`
-              : `The platform runs this ${usd(capital)} paper account by itself: it picks the trades, sizes them, limits the risk and pauses when the edge breaks. Every trade aims for at least 1:2. Paper only — nothing is sent to an exchange.`}
-          </p>
-        </div>
-        <label className="ml-auto flex flex-col text-[11px] text-slate-400">Venue
+    <Page>
+      <PageHead title="System account"
+        sub={futures
+          ? `Binance USDⓈ-M tickets for a ${usd(capital)} account. The stop, not liquidation, closes a loser.`
+          : `The system runs this ${usd(capital)} paper account by itself.`}>
+        <label className="flex flex-col text-[11px] text-slate-400">Venue
           <select className="input" value={venue} onChange={(e) => { setVenue(e.target.value); setD(null); }}>
             <option value="spot">Spot — no leverage</option>
             <option value="futures">Binance Futures (USDⓈ-M)</option>
           </select>
         </label>
-        {futures && (
-          <label className="flex flex-col text-[11px] text-slate-400">Leverage you want
-            <select className="input" value={leverage} onChange={(e) => { setLeverage(+e.target.value); setD(null); }}>
-              {LEVERAGES.map((l) => <option key={l} value={l}>{l}×</option>)}
-            </select>
-          </label>
-        )}
         <label className="flex flex-col text-[11px] text-slate-400">Risk mode
           <select className="input" value={mode} onChange={(e) => { setMode(e.target.value); setD(null); }}>
             <option value="conservative">Conservative — 1% per trade</option>
@@ -105,46 +95,42 @@ export default function SystemAccount() {
           <input className="input w-28" type="number" min={10} step={10} value={capText} onChange={(e) => setCapText(e.target.value)}
             onBlur={applyBudget} onKeyDown={(e) => e.key === "Enter" && applyBudget()} />
         </label>
-      </div>
+      </PageHead>
+      <LabBanner what="A rule-based daily trend system that runs its own $100 paper account." />
       {take && <TakeTrade draft={take} onClose={() => setTake(null)} onAdded={loadMine} />}
-      {err && <div className="text-red-300">{err}</div>}
+      {err && <Note tone="bad">{err}</Note>}
       {!d ? <div className="text-slate-500">Loading a year of daily candles…</div> : (
         <>
           <div className={`card p-3 text-[13px] ${d.market.btc_above_200d ? "border-emerald-500/30 text-emerald-200" : "border-amber-500/30 text-amber-200"}`}>
             {d.market.plain} <span className="text-slate-500">BTC {fmtPrice(d.market.btc_close)} · data to {d.as_of}</span>
           </div>
-          <DeskPanel title="System desk — seven specialist agents" facts={d.agents} intel={intel} briefing={d.briefing} llm={d.llm} />
-          <TopList rows={aiTop ? intel.top_coins : d.top_list}
-            source={aiTop ? `ranked by the Scout agent (${intel.model}) over the analysis cards` : "ranked by the rules over every coin's analysis card; the AI Scout refines it when available"} />
-
           <div>
             <div className="mb-1 flex flex-wrap items-baseline gap-2 text-[12px]">
-              <span className="font-medium text-slate-300">Signal cards — the system&apos;s candidates for the next daily open ({d.signal_cards.length})</span>
-              <span className="text-slate-500">You choose: select a live card you actually place on Binance and it becomes a running trade below.</span>
+              <span className="font-medium text-slate-300">Signal cards for the next daily open ({d.signal_cards.length})</span>
+              <span className="text-slate-500">Placed one on Binance? Select it to track it below.</span>
             </div>
             {d.signal_cards.length === 0 ? (
-              <div className="card p-3 text-[12px] text-slate-500">No candidate within 5% of a 20-day high. The system only buys a daily close above the 20-day high while BTC is above its 200-day average — waiting is part of the plan.</div>
+              <div className="card p-3 text-[12px] text-slate-500">No coin within 5% of a 20-day high. The system buys only a daily close above it, while BTC is above its 200-day average.</div>
             ) : (
               <div className="grid gap-3 lg:grid-cols-2 xl:grid-cols-3">
                 {d.signal_cards.map((s: any) => <SystemSignalCard key={`${s.symbol}-${s.state}`} s={s} onSelect={() => takeSignal(s)} />)}
               </div>
             )}
           </div>
-
           <div>
             <div className="mb-1 flex items-baseline text-[12px]">
               <span className="font-medium text-slate-300">Your running trades ({mine?.open?.length ?? 0})</span>
-              <a href="/portfolio" className="ml-auto text-[11px] text-sky-400">full portfolio, budget plan and record →</a>
+              <a href="/portfolio" className="ml-auto text-[11px] text-sky-400">Full portfolio →</a>
             </div>
             {!mine ? <div className="text-[12px] text-slate-500">Loading…</div> : mine.open.length === 0 ? (
-              <div className="card p-3 text-[12px] text-slate-500">None yet. After you place a live signal on Binance, select its card above: it shows here with live P&amp;L, margin, liquidation and the next action every day.</div>
+              <div className="card p-3 text-[12px] text-slate-500">None yet. Select a card above after you place it on Binance.</div>
             ) : (
               <div className="grid gap-3 lg:grid-cols-2 xl:grid-cols-3">
                 {mine.open.map((c: any) => <OpenCard key={c.id} c={c} onPartial={() => act.partial(c)} onClose={() => act.close(c)} onRemove={() => act.remove(c)} />)}
               </div>
             )}
           </div>
-
+          <Card title="System account results">
           <div className="grid grid-cols-2 gap-2 md:grid-cols-4 xl:grid-cols-8">
             <Stat label="System balance" value={usd(a.equity_usd)} tone={tone(a.equity_usd - a.start_usd)} />
             <Stat label={`Return since ${a.replay_from}`} value={pct(a.return_pct)} tone={tone(a.return_pct)} />
@@ -155,13 +141,20 @@ export default function SystemAccount() {
             <Stat label="Risk per trade now" value={`${r.risk_now_pct}% (${usd(a.equity_usd * r.risk_now_pct / 100)})`} />
             <Stat label="Money at risk now" value={usd(a.open_risk_usd)} />
           </div>
-          {d.budget_plan && <BudgetPlan p={d.budget_plan} />}
-          <div className="card p-3">
+            <div className="mt-4">
+          <div>
             <div className="mb-1 flex text-[12px] text-slate-400">System balance over time
               <span className="ml-auto text-slate-500">daily, includes fees and slippage</span></div>
             <Spark values={d.equity_curve.map((p: any) => p.equity)} height={140} />
           </div>
+            </div>
+          </Card>
+          <More>
+          <DeskPanel title="AI desk" facts={d.agents} intel={intel} briefing={d.briefing} llm={d.llm} onRun={() => setRunAi(true)} />
+          <TopList rows={aiTop ? intel.top_coins : d.top_list}
+            source={aiTop ? `ranked by the Scout agent (${intel.model})` : "ranked by measured setups and trend (the AI Scout ranks it when available)"} />
 
+          {d.budget_plan && <BudgetPlan p={d.budget_plan} />}
           <div className="card overflow-auto p-2">
             <div className="px-1 pb-1 text-[12px] font-medium text-slate-300">System paper account — open positions</div>
             {d.open_positions.length === 0 ? <div className="px-1 text-[12px] text-slate-500">None — the system account is in cash.</div> : (
@@ -174,26 +167,26 @@ export default function SystemAccount() {
                 <span key="x" className="text-slate-500">{p.plan}</span>])} />
             )}
           </div>
-
           {futures && (
             <div className="card p-3 text-[12px] text-slate-300">
-              <div className="mb-1 font-medium">How to place a selected card on Binance (by hand — the platform never sends orders)</div>
+              <div className="mb-1 font-medium">How to place a card on Binance (by hand)</div>
               <ol className="list-decimal space-y-0.5 pl-5 text-slate-400">{fu.how_to.map((s: string) => <li key={s}>{s}</li>)}</ol>
-              <p className="mt-2 text-slate-500">
-                Costs used: taker {fu.rules.taker_fee_pct}% per side, liquidation fee {fu.rules.liquidation_fee_pct}%. Liquidation estimate:
-                {" "}{fu.rules.liquidation_formula}, maintenance margin BTC {fu.rules.mmr_pct.BTCUSDT}%, ETH {fu.rules.mmr_pct.ETHUSDT}%, others {fu.rules.mmr_pct.others}%.
-                Binance&apos;s own liquidation price (mark price, tiered margin) is the one that counts.{fu.filters_live ? " Lot sizes and minimums are live from Binance." : " Lot sizes are defaults (Binance was unreachable)."}
-              </p>
+              <details className="mt-2 text-slate-500">
+                <summary className="cursor-pointer hover:text-slate-300">Costs and liquidation math</summary>
+                <p className="mt-1">
+                  Costs used: taker {fu.rules.taker_fee_pct}% per side, liquidation fee {fu.rules.liquidation_fee_pct}%. Liquidation estimate:
+                  {" "}{fu.rules.liquidation_formula}, maintenance margin BTC {fu.rules.mmr_pct.BTCUSDT}%, ETH {fu.rules.mmr_pct.ETHUSDT}%, others {fu.rules.mmr_pct.others}%.
+                  Binance&apos;s own liquidation price is the one that counts.{fu.filters_live ? " Lot sizes and minimums are live from Binance." : " Lot sizes are defaults (Binance was unreachable)."}
+                </p>
+              </details>
             </div>
           )}
-
           <div className="card overflow-auto p-2">
             <div className="px-1 pb-1 text-[12px] font-medium text-slate-300">System paper account — closed trades</div>
             <Table head={["Coin", "Opened", "Closed", "Entry", "Exit", "Reached 2R", "Why closed", "Result"]} rows={d.recent_trades.map((t: any) => [
               pair(t.symbol), t.opened, t.closed, fmtPrice(t.entry), fmtPrice(t.exit), t.half_at_2r ? "yes — a third sold" : "no", t.why,
               <span key="r" className={t.pnl >= 0 ? "text-up" : "text-down"}>{usd(t.pnl, true)} ({t.r > 0 ? "+" : ""}{t.r}R)</span>])} />
           </div>
-
           <div className="grid gap-3 lg:grid-cols-2">
             <div className="card p-3 text-[12px] text-slate-300">
               <div className="mb-1 font-medium">Risk rules (the system enforces these, not you)</div>
@@ -219,7 +212,6 @@ export default function SystemAccount() {
               )}
             </div>
           </div>
-
           {ls && (
             <div className="grid gap-3 lg:grid-cols-2">
               <div className="card overflow-auto p-3 text-[12px] text-slate-300">
@@ -239,7 +231,7 @@ export default function SystemAccount() {
               </div>
               <div className="card overflow-auto p-3 text-[12px] text-slate-300">
                 <div className="mb-1 font-medium">Win rate vs payoff — same signal and stop, different targets</div>
-                <p className="mb-2 text-slate-400">Win rates and average result per trade after costs, in the 2020-23 / 2024 / 2025-26 periods. No target reaches 90%; the most accurate one earns the least.</p>
+                <p className="mb-2 text-slate-400">Win rate and average per trade after costs, for 2020-23 / 2024 / 2025-26. No target reaches 90%; the most accurate one earns the least.</p>
                 <Table head={["Target", "Win rate", "Avg per trade", "All periods"]} rows={ls.winrate_vs_target.map((x: any) => [
                   <span key="t" className={x.target_R === 2 ? "text-slate-100" : undefined}>{x.target_R}R</span>, wins(x), avgs(x),
                   x.pooled ? `${(x.pooled.win * 100).toFixed(0)}% · ${rr(x.pooled.E)}` : "—"])} />
@@ -250,8 +242,9 @@ export default function SystemAccount() {
               </div>
             </div>
           )}
+          </More>
         </>
       )}
-    </div>
+    </Page>
   );
 }

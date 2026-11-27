@@ -10,3 +10,4 @@ backend/data/
 .ruff_cache/
 .DS_Store
 .qodo/
+frontend/public/guide/

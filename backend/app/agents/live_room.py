@@ -198,6 +198,9 @@ def _tone(v: int) -> str:
 
 
 async def run_live(sid: str, symbol: str | None, tf: str) -> None:
+    from app.agents import costs
+
+    costs.FEATURE.set("live")
     from app.agents import forecast_hub
     from app.agents.scout import wait_scan
     from app.api.chat import _schools, _walk

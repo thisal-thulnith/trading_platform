@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { Note, Page, PageHead } from "@/components/ui/Page";
 import { useStore } from "@/lib/store";
 import { CHAPTERS, GLOSSARY } from "./content";
 import { Diagram } from "./diagrams";
@@ -24,30 +25,29 @@ export default function Learn() {
   const gloss = GLOSSARY.filter(([t, d]) => !q || (t + d).toLowerCase().includes(q.toLowerCase()));
   const openWalk = () => { requestWalkthrough(); router.push("/terminal"); };
   return (
-    <div className="grid h-full grid-cols-[260px_1fr] overflow-hidden">
-      <nav className="overflow-auto border-r border-line bg-panel p-3 text-[12.5px]">
-        <div className="mb-2 flex items-center gap-2 font-semibold text-slate-100"><BookOpen size={15} className="text-sky-400" /> Learn</div>
+    <Page>
+      <PageHead title="Lessons" sub="Trading basics, step by step">
+        <button onClick={openWalk} className="btn btn-primary">▶ Watch the AI read a live chart</button>
+      </PageHead>
+      <Note tone="warn">Not financial advice. Most short-term traders lose money: practise on paper and never risk money you can&apos;t afford to lose.</Note>
+    <div className="grid gap-8 md:grid-cols-[240px_1fr]">
+      <nav className="sticky top-4 max-h-[calc(100vh-7rem)] self-start overflow-auto rounded-2xl border border-line bg-panel p-4 text-[12.5px]">
+        <div className="mb-2 flex items-center gap-2 font-semibold text-slate-100"><BookOpen size={15} className="text-sky-400" /> Lessons</div>
         <div className="relative mb-3"><Search size={12} className="absolute left-2 top-2 text-slate-500" />
           <input className="input w-full pl-6 text-[12px]" placeholder="Search lessons & glossary" value={q} onChange={(e) => setQ(e.target.value)} /></div>
         {filtered.map((c) => (
           <div key={c.id} className="mb-3">
-            <div className="mb-1 text-[11px] font-semibold uppercase tracking-wider text-slate-500">{c.title}</div>
+            <div className="mb-1 text-[12px] font-semibold text-slate-500">{c.title}</div>
             {c.lessons.map((l) => <a key={l.slug} href={`#${l.slug}`} className="block rounded px-2 py-0.5 text-slate-300 hover:bg-white/5">{l.title}</a>)}
           </div>
         ))}
         <a href="#glossary" className="block rounded px-2 py-0.5 font-medium text-slate-300 hover:bg-white/5">Glossary A → Z</a>
       </nav>
-      <div className="overflow-auto scroll-smooth">
-        <div className="mx-auto max-w-3xl px-6 py-6">
-          <h1 className="text-2xl font-semibold text-slate-100">Learn trading — and how to use this platform</h1>
-          <p className="mt-1 text-slate-400">From zero to reading a chart like an analyst. Each concept links back to the live chart, where the AI shows it on real data.</p>
-          <div className="mt-3 flex flex-wrap gap-2">
-            <button onClick={openWalk} className="btn btn-primary">▶ Watch the AI analyse a live chart step by step</button>
+      <div className="min-w-0">
+        <div className="max-w-3xl">
+          <div className="flex flex-wrap gap-2">
             <Link href="#getting-started" className="btn">Start here</Link>
             <Link href="#risk-management" className="btn">Risk management first</Link>
-          </div>
-          <div className="mt-3 rounded border border-amber-500/30 bg-amber-500/10 p-3 text-[12.5px] text-amber-100">
-            Educational content, not financial advice. Most short-term traders lose money. Practise with paper trading, risk small amounts, and never trade money you can&apos;t afford to lose.
           </div>
           {filtered.map((c) => (
             <section key={c.id} className="mt-10">
@@ -74,5 +74,6 @@ export default function Learn() {
         </div>
       </div>
     </div>
+    </Page>
   );
 }

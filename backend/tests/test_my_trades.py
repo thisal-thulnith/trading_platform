@@ -25,7 +25,7 @@ def test_budget_plan_counts_tradeable_coins_and_recommends():
 def _trade(**kw) -> MyTrade:
     base = {"symbol": "SOLUSDT", "venue": "spot", "side": "LONG", "leverage": 1.0, "entry": 100.0, "qty": 1.0,
             "stop": 90.0, "target": 120.0, "risk_usd": 10.0, "budget_usd": 100.0, "mode": "growth",
-            "partial_done": False, "status": "open", "source": "manual",
+            "partial_done": False, "status": "open", "source": "system",
             "opened_at": datetime(2024, 6, 1, 12, tzinfo=UTC)}
     return MyTrade(**(base | kw))
 
@@ -101,3 +101,10 @@ def test_coach_flags_leverage_and_risk_above_the_plan():
     assert coach["level"] == "warn" and "20x is above the safe" in coach["text"] and "risked $8.00" in coach["text"]
     assert "No open trades" in msgs[1]["text"] and "$2.0 per trade" in msgs[0]["text"]
     assert np.isfinite(plan["typical_position_usd"])
+
+
+def test_your_own_trades_are_managed_with_one_stop_and_one_target():
+    t = _trade(source="manual")
+    s = mt.plan_state(t, _frame(highs={"2024-06-02": 121.0}))   # take profit reached: close it, no "a third"
+    assert s["action"] == "close" and s["level"] == "good" and "third" not in s["text"]
+    assert mt.plan_state(_trade(source="manual"), _frame(n=70))["action"] == "hold"   # no 60-day rule for your trades

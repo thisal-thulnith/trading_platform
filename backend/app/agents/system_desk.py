@@ -191,6 +191,9 @@ async def llm_briefing(msgs: list[dict]) -> str | None:
     """Optional: one short plain-English paragraph from the agents' messages. No new numbers allowed."""
     if not provider():
         return None
+    from app.agents import costs
+
+    costs.FEATURE.set("system")
     try:
         return await complete(
             "You are the head of a trading desk writing a 3-sentence briefing for a beginner. Use ONLY facts and numbers "

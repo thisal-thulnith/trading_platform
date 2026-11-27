@@ -36,3 +36,20 @@ async def db():
     async with dbmod.session_factory()() as s:
         yield s
     await dbmod.engine().dispose()
+
+
+@pytest.fixture(autouse=True)
+def _never_touch_real_data(tmp_path, monkeypatch):
+    """Tests must never write the owner's real files (a test once wrote a fake AI verdict into
+    data/models/agent_verdicts.json that then showed on the live pages). Every file a module writes goes to tmp."""
+    from app.agents import costs
+    from app.ml import signal_history, signal_test
+    from app.portfolio import manager
+
+    monkeypatch.setattr(signal_test, "_verdicts_path", lambda: tmp_path / "agent_verdicts.json")
+    monkeypatch.setattr(manager, "STATE", tmp_path / "my_account.json")
+    monkeypatch.setattr(costs, "LOG", tmp_path / "llm_usage.jsonl")
+    monkeypatch.setattr(costs, "CREDIT", tmp_path / "llm_credit.json")
+    snaps = tmp_path / "daily_rankings"
+    snaps.mkdir()
+    monkeypatch.setattr(signal_history, "_snap_dir", lambda: snaps)

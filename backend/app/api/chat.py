@@ -9,6 +9,7 @@ import anthropic
 import openai
 from fastapi import APIRouter, Depends, HTTPException
 
+from app.agents import costs
 from app.agents.graph import run_agents
 from app.agents.llm import FALLBACK_BETA, client, openai_client, provider
 from app.api.schemas import ChatIn
@@ -254,6 +255,7 @@ async def openai_chat(body: ChatIn, ctx: ChatContext) -> dict | None:
         except openai.APIError as e:
             log.warning("chat_openai_error", error=str(e))
             return None
+        costs.track_openai(r, s.openai_model)
         msg = r.choices[0].message
         if not msg.tool_calls:
             text = (msg.content or "").strip()
@@ -293,6 +295,7 @@ async def llm_chat(body: ChatIn, ctx: ChatContext) -> dict | None:
         except anthropic.APIError as e:
             log.warning("chat_llm_error", error=str(e))
             return None
+        costs.track_anthropic(r, s.llm_model)
         if r.stop_reason == "refusal":
             return {"text": "I can't help with that request.", "actions": ctx.actions, "mode": "llm"}
         if r.stop_reason != "tool_use":
@@ -393,6 +396,7 @@ async def rule_chat(body: ChatIn, ctx: ChatContext) -> dict:
 
 @router.post("/chat", dependencies=[Depends(chat_limiter)])
 async def chat(body: ChatIn):
+    costs.FEATURE.set("chat")
     sym = _sym(body.symbol) if body.symbol else None
     ctx = ChatContext(sym, body.timeframe or "1h")
     try:
@@ -574,7 +578,7 @@ async def system_account(capital: float = 100.0, days: int = 365, mode: str = "c
 
 @router.get("/system/desk")
 async def system_desk(capital: float = 100.0, days: int = 365, mode: str = "conservative", venue: str = "spot",
-                      leverage: int = 20):
+                      leverage: int = 20, run: bool = False):
     """The intelligent desk for the system account: LLM agents with tools, run in the background (first call starts it,
     later calls return progress, then the cached result for an hour)."""
     from app.agents import intel_desk
@@ -591,4 +595,5 @@ async def system_desk(capital: float = 100.0, days: int = 365, mode: str = "cons
         raise HTTPException(400, str(e)) from e
     except RuntimeError as e:
         raise HTTPException(503, str(e)) from e
-    return intel_desk.system_desk(acct, frames, system._cache.get("filters") or {}, system._cache.get("funding") or {})
+    return intel_desk.system_desk(acct, frames, system._cache.get("filters") or {}, system._cache.get("funding") or {},
+                                  start=run)

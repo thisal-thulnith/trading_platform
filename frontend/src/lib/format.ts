@@ -19,7 +19,7 @@ export function ago(ts: string | number | null | undefined): string {
   if (s < 86400) return `${Math.floor(s / 3600)}h ago`;
   return `${Math.floor(s / 86400)}d ago`;
 }
-export const pair = (s: string) => (s.endsWith("USDT") ? `${s.slice(0, -4)}/USDT` : s);
+export const pair = (s?: string | null) => (!s ? "" : s.endsWith("USDT") ? `${s.slice(0, -4)}/USDT` : s);
 export const dirColor = (d: string | number) =>
   d === "LONG" || d === "bullish" || (typeof d === "number" && d > 0) ? "text-up" : d === "SHORT" || d === "bearish" || (typeof d === "number" && d < 0) ? "text-down" : "text-muted";
 export const stateColor = (s: string) =>

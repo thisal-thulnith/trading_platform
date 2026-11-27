@@ -1,6 +1,5 @@
 "use client";
 import { RefreshCw } from "lucide-react";
-import Link from "next/link";
 import { useState } from "react";
 import { api } from "@/lib/api";
 import { ago, dirColor, fmtNum, fmtPct, fmtPrice } from "@/lib/format";
@@ -12,7 +11,7 @@ import Inspector from "./Inspector";
 function Section({ title, children, right }: { title: string; children: React.ReactNode; right?: React.ReactNode }) {
   return (
     <div className="border-b border-line px-3 py-2">
-      <div className="mb-1.5 flex items-center text-[11px] font-semibold uppercase tracking-wider text-slate-500">{title}<span className="ml-auto normal-case">{right}</span></div>
+      <div className="mb-1.5 flex items-center text-[12px] font-semibold text-slate-500">{title}<span className="ml-auto normal-case">{right}</span></div>
       {children}
     </div>
   );
@@ -71,7 +70,7 @@ export default function AnalysisPanel({ snap, reload, loading }: { snap: Snapsho
   return (
     <div className="h-full overflow-auto">
       <Inspector snap={snap} />
-      <Section title="Decision" right={<span className="text-[10px] text-slate-500">as of close {new Date(snap.as_of_close_time).toISOString().slice(11, 16)}Z · {ago(snap.generated_at)}</span>}>
+      <Section title="Chart scanner call (Lab, not the main signal)" right={<span className="text-[10px] text-slate-500">as of close {new Date(snap.as_of_close_time).toISOString().slice(11, 16)}Z · {ago(snap.generated_at)}</span>}>
         <div className="flex items-center gap-2">
           <span className={`text-lg font-bold ${d.action === "LONG" ? "text-up" : d.action === "SHORT" ? "text-down" : "text-slate-300"}`}>{d.action.replace("_", " ")}</span>
           {d.quality && <span className="chip bg-violet-500/20 text-violet-300">quality {d.quality}</span>}
@@ -122,7 +121,7 @@ export default function AnalysisPanel({ snap, reload, loading }: { snap: Snapsho
             {snap.ml.drift_alert && <div className="text-amber-300">Feature drift alert (PSI {snap.ml.drift_psi_max.toFixed(2)})</div>}
             <div className="mt-1 text-[11px] text-slate-500">{snap.ml.contributions.map((c: any) => `${c.feature} ${c.shap > 0 ? "+" : ""}${c.shap.toFixed(3)}`).join(" · ")}</div>
           </div>
-        ) : <div className="text-[12px] text-slate-500">No validated model in use. Candidate models are rejected unless they beat baselines out-of-sample after costs. <Link href="/research" className="text-sky-400">See research lab</Link></div>}
+        ) : <div className="text-[12px] text-slate-500">No validated model in use. Candidate models are rejected unless they beat baselines out-of-sample after costs.</div>}
       </Section>
       <Section title="Derivatives & flow">
         {der?.available ? (<>

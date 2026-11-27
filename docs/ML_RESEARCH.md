@@ -154,3 +154,216 @@ Failing models stay in the research registry. Do not "fix" them by tuning on the
 - Yurdakul (2018) Statistical properties of the Population Stability Index: https://scholarworks.wmich.edu/dissertations/3208/
 - scikit-learn probability calibration: https://scikit-learn.org/stable/modules/calibration.html
 - Nixtla neuralforecast: https://github.com/Nixtla/neuralforecast
+
+---
+
+## 11. Results: meta-label filter on engine setups (2026-11-11)
+
+Code: `backend/app/ml/meta_label.py`. Run: `uv run python -m app.ml.meta_label --tf 4h --days 1460 --symbols ...`.
+
+**What it is.** A secondary model (López de Prado, AFML §3.6) on top of the rule engine. The primary "model" is the engine itself: every confirmed and validated setup that `app.backtest.engine.generate_setups` produces, which is the same code path as live, regenerated with the current strategy code. The live exit profile `edge_tp2r` is applied (single limit at the zone edge, the strategy's stop, one take-profit at +2R). The label is 1 if `TradeSim` (the backtester's simulator, with 0.05% taker fee and 2 bps slippage) hits +2R before the stop, and 0 on a stop or time exit. Unfilled setups are dropped. Features are the f1 set (without taker imbalance, which the long CSV history lacks), direction-aligned copies of them, and setup-level features: strategy, direction, regime, validation quality, confluence bias, supporting/opposing evidence families, stop distance in ATR, distance from price to the limit, R to the nearest opposing S/R level, higher-timeframe trend agreement, last and 3-day mean perp funding (signed per side), and hour/day. The model is LightGBM with isotonic calibration on the last 20% of each training window. It is compared with the training base rate and an L2 logistic regression, using purged walk-forward CV (5 folds, 24-bar embargo). The take/skip threshold for test fold k is chosen on folds < k only, so fold 0 is validation only.
+
+**Acceptance policy.** These are the `train.py` criteria adapted to a filter, plus the §7.2 ECE gate:
+- log loss beats the base rate on ≥ 70% of folds;
+- mean AUC ≥ 0.52 and above the logistic baseline;
+- the filtered trades number ≥ 30, have a bootstrap 95% CI lower bound of expectancy > 0, and beat taking every setup;
+- ECE ≤ 0.03.
+
+DSR, PBO, drop-one stability and a final holdout (§7.3 to §7.5) were not run.
+
+### 4h: 12 symbols, Nov 2022 to Nov 2026. REJECTED
+
+The symbols are BTC, ETH, SOL, XRP, BNB, DOGE, LINK, AVAX, AAVE, ADA, ALGO and APT, from the `data/history/4h` CSVs. These are survivors, and the set was scaled down from 35 because setup generation takes about 11 min per symbol. The run produced 11,252 engine setups and 8,316 filled and resolved trades, with a base rate of 35.9% hitting +2R first.
+
+Out of sample, folds 1 to 4 (Nov 2024 to Nov 2026; fold 0, May to Nov 2024, is validation only), R after costs:
+
+| | Trades | +2R hit | Win (R>0) | Expectancy | 95% CI (iid bootstrap) | Total R |
+|---|---|---|---|---|---|---|
+| All setups | 4,107 | 35.5% | 36.3% | +0.017R | [−0.027, +0.061] | +69.1R |
+| Meta filter (LightGBM, p ≥ 0.278) | 3,709 | 36.7% | 37.2% | +0.043R | [−0.004, +0.088] | +160.7R |
+| Logistic filter (baseline) | 3,578 | 37.0% | 37.3% | +0.048R | [+0.003, +0.096] | +171.4R |
+
+Per fold (meta filter vs all setups): +0.122R vs +0.077R, +0.161R vs +0.145R, −0.080R vs −0.106R, and −0.017R vs −0.038R. The filter helps a little in every fold, but it drops only about 10% of setups, and it cannot turn the losing periods (folds 3 and 4, Oct 2025 onward) positive.
+
+Mean AUC was 0.549 for LightGBM and 0.547 for logistic regression. Calibrated log loss beat the base rate in only 1 of 5 folds. Pooled OOS ECE was 0.044. The AUC with permuted labels was 0.488, so there is no sign of leakage.
+
+Failed criteria:
+- log loss vs the base rate (20% of folds, 70% needed);
+- expectancy CI lower bound > 0;
+- ECE ≤ 0.03.
+
+The logistic baseline does as well as LightGBM, or slightly better, as a filter. Whatever ranking signal exists is weak and roughly linear. No model was saved, and `score()` returns `accepted_model: false`.
+
+### 1h: 19 symbols, 540 days (May 2025 to Nov 2026). REJECTED
+
+8,886 filled trades from all 19 symbols in the candles table; 33.3% reached +2R first. Run 20261111144210.
+
+| OOS folds 1 to 4 | Trades | +2R hit | Win (R>0) | Expectancy | 95% CI | Total R |
+|---|---|---|---|---|---|---|
+| All setups | 3,968 | 33.9% | 36.2% | −0.029R | [−0.073, +0.014] | −116.0R |
+| Meta filter (LightGBM) | 2,132 | 37.8% | 38.7% | +0.053R | [−0.009, +0.116] | +113.9R |
+| Logistic filter | 1,001 | 35.7% | 36.1% | −0.028R | [−0.113, +0.063] | −28.4R |
+
+Per fold (filter vs all setups): +0.085R on 8 kept trades vs −0.166R; +0.187R vs +0.080R; −0.004R vs −0.021R;
++0.031R vs +0.004R. Mean AUC was 0.522 for LightGBM, **below** logistic regression's 0.530; log loss beat the base rate in
+1 of 5 folds (20%); ECE was 0.036; the shuffled-label control gave 0.504 (and 0.551 in fold 0, above the real model there).
+The filter's +114R swing looks large but its CI includes zero, the model barely separates winners from losers, and fold 1
+kept only 8 trades — it is not trustworthy. Rejected: no model file, `score()` returns `p: null`.
+
+### Reading
+
+- The engine's setups have a small edge over random (AUC about 0.55) for "will this reach 2R", but not one that is calibrated or economically significant after costs. This matches the prior at the top of this document.
+- Neither timeframe passes (4h and the full 1h run), so the desk shows no meta-label probability. `score()` returns `p: null` together with the failed criteria.
+
+**Caveats:**
+- Setups are labelled independently, so the engine's one-position-per-symbol/strategy rule is not applied and overlapping trades are double-counted.
+- The CIs use an iid bootstrap over correlated trades and are optimistic.
+- Isotonic calibration is fitted on slices of 200 to 1,500 samples, below the ≥ 1,000 rule of thumb in §6 for the smaller folds.
+- Backtest snapshots have no order book or derivatives data, unlike live.
+
+## 12. Upgrade research: what serious systems do, and what it bought us (2026-11-24)
+
+### What the literature and current systems say
+- **Cross-sectional ML on many technical signals works in crypto, modestly.** Fieberg, Liedtke, Poddig, Walker & Zaremba,
+  "A Trend Factor for the Cross-Section of Cryptocurrency Returns" (JFQA, 2025): combining many classic indicators
+  (price vs moving averages over several windows, volume, oscillators) with ML predicts returns across 3,000+ coins and
+  survives 53,920 robustness variants.
+- **Model complexity adds little.** Cakici, Shahzad, Będowska-Sójka & Zaremba (IRFA, 2024): many ML models predict the
+  crypto cross-section, the edge sits mostly in the long leg, and fancier models add little over simple ones. This
+  matches our own result that the blend of a linear model and LightGBM is usually chosen.
+- **Multi-agent LLM desks** (TradingAgents, Xiao et al., 2024-25): analysts by specialty (fundamental, sentiment,
+  technical), a bull/bear debate, a trader and a risk team. Their reported gains are backtests, not live results. The
+  platform's desk already has this shape; what it lacked was a lead who owns the computational evidence.
+- **Perpetual-futures data**: deviations of perps from fair value are large in crypto and are predicted by past returns
+  (He, Manela, Ross & von Wachter, "Fundamentals of Perpetual Futures"); open interest is misquoted on some exchanges
+  (Giagkiozis & Said, Ledger 2024), so it is used with care. Funding is already a feature.
+
+### What was tested (app/ml/upgrade_eval.py, data/models/upgrade_eval.json)
+Same walk-forward, same 295,117 liquid-coin rows. Added 21 CTREND-style indicators (app/ml/technicals.py: price vs
+3/5/10/20/100-day averages, volume vs 5/20/50-day averages, stochastic 14/30, RSI 14, MACD and histogram, Bollinger %B
+and width, CCI 20, Chaikin money flow, the largest daily return in 30 days, 30-day skew, 3-day return, share of down
+days), each raw and ranked within the day (98 features instead of 56), and LightGBM averaged over three seeds.
+
+AUC, chosen on 2020-24, reported on 2025-26:
+
+| Target | Today's best (2020-24 → 2025-26) | Best with the upgrade | Gain 2020-24 | Gain 2025-26 |
+|---|---|---|---|---|
+| Long hits target first | blend 0.614 → 0.671 | blend + bagged LightGBM 0.619 → 0.674 | +0.005 | +0.003 |
+| Short hits target first | blend 0.679 → 0.646 | blend with indicators 0.681 → 0.651 | +0.002 | +0.005 |
+| 2-ATR drop risk | blend 0.659 → 0.650 | blend with indicators 0.664 → 0.657 | +0.005 | +0.006 |
+| Up in 7 days | blend 0.547 → 0.579 | blend with indicators 0.554 → 0.575 | +0.006 | −0.004 |
+| Beats the median coin | blend 0.566 → 0.604 | blend + bagged LightGBM 0.570 → 0.601 | +0.003 | −0.003 |
+
+Reading: the indicators win on the selection years for every target, so they were adopted as candidates. On the
+unseen years the gain is small (+0.3 to +0.6 AUC points on the three trade targets, a hair worse on the two direction
+targets). This is what the literature predicts: the momentum, volatility and pattern features already carry most of
+what classic indicators know. No change here moves a signal anywhere near a 90% win rate.
+
+## 13. The unified engine: every method in one model (2026-11-24)
+
+### Why one model, not opinions side by side
+Running a "concept" analysis and a "machine" analysis in parallel and then comparing them leaves the hardest part,
+how much each one is worth, to a human. The industry answer is to put every signal into one learner and let it weigh
+them by their measured value:
+- **Alpha combination.** Grinold & Kahn (Active Portfolio Management): combine signals by their measured information
+  content, not by story. A tree model trained on all of them does this weighing per coin and per market state.
+- **Concepts are features, not rules.** Lo, Mamaysky & Wang (JF 2000) found that classic chart patterns carry some
+  information when measured systematically. Osler (JF 2003) showed why support, resistance and round numbers matter:
+  take-profit orders cluster at round numbers and stop-losses just beyond them, so trends tend to reverse at those
+  levels and accelerate once they break. Jiang, Kelly & Xiu (JF 2023) showed a model reading chart images predicts
+  returns. None of these say a hand-written rule is enough; they say the information is real when it is measured.
+- **Meta-labeling** (López de Prado, AFML 2018) splits the side decision from the trade/size decision. Practitioners
+  report it is "not a silver bullet": it adds little on top of an already good model. Here the plan models already
+  predict the R of each trade directly, so the trade / no-trade decision is a small rule on top of them.
+- **Selection bias.** Bailey & López de Prado (deflated Sharpe ratio, 2014; probability of backtest overfitting,
+  2015/2017): the best of many backtests is inflated. So the decision layer tries only 8 rules, picks one on
+  2020-24, reports all 8 and gives a bootstrap range for the unseen years.
+
+### Architecture (app/ml/unified.py)
+1. Features for every coin and day since 2017: market and factors (quant lab), 21 technical indicators
+   (technicals.py), 35 human trading concepts (concepts.py: market structure with BOS/CHoCH, premium/discount,
+   liquidity sweeps, equal highs/lows, fair value gaps, displacement, Wyckoff springs/upthrusts, VWAP, candles,
+   average stack, strength vs BTC, round numbers, long/short checklists), and learned chart patterns (patterns.py).
+   All causal; tests/test_concepts.py changes every candle after a day and checks that nothing up to it moves.
+2. 18 plan models (style.py): one LightGBM per plan (side x stop 0.75/1.5/2.5 ATR x target 1.5/2/3R, 14 days)
+   predicting the realised R after fees. Walk-forward by year, 15-day purge.
+3. Decision: score = predicted R (raw) or R relative to the same plan on the other coins (edge); top 1 or top 3
+   coins a day; with or without a bar (the median top score of the past year). Coins with ATR above 25% are never
+   picked. Chosen on 2020-24 with at least 300 trades.
+4. Output: coin, side, plan, levels at the live price, the leverage table, the 0.75-ATR option for 10-20x, and why:
+   TreeSHAP contributions of the chosen plan's model summed by concept group. Today's signal, the Signal test and
+   Cipher's `tested_signal` tool all read this one engine; the daily refresh re-scores it and the monthly retrain
+   relearns it.
+
+### Results (2026-11-24, data to 2026-11-23, 295k liquid coin-days)
+**Concepts test: rejected.** Same decision rule, same rows:
+
+| | 2020-24 | 2025-26 (unseen) |
+|---|---|---|
+| Plan models with the 35 concept features | +0.170R / trade (1,461) | +0.047R (678) |
+| Plan models without them | +0.199R | +0.080R |
+
+The concepts lowered the result in both periods: momentum, volatility, ranges and the learned chart patterns already
+carry what structure, liquidity and Wyckoff measure, and 35 more inputs add noise. concepts.py stays (tested, causal,
+documented) and `unified.USE_CONCEPTS = False`; the human-style reading stays with the AI agents (Vega's team), where
+it is an argument to weigh, not a model input.
+
+**Decision rule** (8 tried, chosen on 2020-24 with 300+ trades): score = a coin's predicted R minus the same plan's
+median on the other coins that day ("edge"), the single best coin a day, no bar.
+
+| Rule | 2020-24 | 2025-26 |
+|---|---|---|
+| edge, top 1, no bar (**chosen**) | +0.199R (1,461) | **+0.080R (678), 90% range −0.064 to +0.234** |
+| edge, top 3, no bar | +0.160R | +0.140R |
+| edge, top 1, bar | +0.112R | +0.150R |
+| edge, top 3, bar | +0.081R | +0.274R |
+| raw, top 1, no bar | +0.072R | +0.210R |
+| raw, top 3, no bar | +0.054R | +0.252R |
+| raw, top 1, bar | −0.005R | +0.220R |
+| raw, top 3, bar | +0.010R | +0.349R |
+
+Every rule made money on the unseen years, and the ranking flipped: the rule that was best on 2020-24 is the weakest on
+2025-26. The chosen rule was NOT changed after seeing this (that would be choosing on the unseen years); the
+live Signal test now records its picks. A random liquid coin with the same plan on the same days: −0.035R / −0.058R.
+By year: 2021 +0.14, 2022 +0.22, 2023 +0.27, 2024 +0.17, 2025 +0.11, 2026 +0.05. Shorts carried 2025-26 (+0.455R,
+51% in profit, 172 trades); longs −0.047R (506). Paper account at 0.5% risk a day, booked at entry: 2025-26 +14.6% a
+year, worst drop −20.1%, Sharpe 1.04 (2020-24: +42.1% a year, −24.0%, 2.41). Verdict: tested edge, small, its range
+includes zero, and fading in 2026.
+
+## 14. How to combine the machine, other methods and the AI agents (2026-11-26)
+
+The question: the platform has one trained model (the unified engine), several other systems (the 4h setup screener,
+the rule-based system account, the pattern scanner, the factor ranking) and the AI agents. What is the right way to
+combine them so the signal gets better and not just more complicated?
+
+What the research says, and what we did with each:
+
+1. **One model that sees every input beats several models voting.** Stacking every feature into one learner lets it
+   weigh them against each other on the same trades; a vote of separate systems double-counts what they share (most of
+   them read the same price trend). This is what the unified engine is (§13). The other systems stay in the Lab, shown
+   separately, and never change the main signal.
+2. **Meta-labeling** (Lopez de Prado, AFML ch. 3): a second model learns, from the primary model's own past trades, when
+   its picks fail, and skips or shrinks them. Tested here (`app/ml/meta_engine.py`, `data/models/meta_engine_report.json`):
+   2,139 out-of-sample picks (2021-26); 15 features known on the pick day (the pick's scores, the gap to the next coin,
+   how crowded the top is, plan, volatility, BTC trend, the other side's forecast, and the engine's own record from
+   trades already closed); logistic and a small LightGBM; walk-forward by year with a 15-day purge; 10 policies (skip
+   below 0.30 / 0.34 / 0.38 / 0.42, or size by the chance of profit) chosen on 2022-24 (2021 only trains).
+   **Result: rejected.** The meta models barely separate winners from losers (AUC 0.52-0.53). The policy chosen on
+   2022-24 (logistic, skip below 0.30) lifted 2022-24 from Sharpe 2.67 to 2.97, then on unseen 2025-26 fell from Sharpe
+   1.04 to 0.48 (+0.039R a trade against +0.080R; total +22R against +54R; 90% range of the difference −80R..+8R).
+   Same lesson as §11: the engine's picks carry no learnable "this one will fail" signal beyond what the engine already
+   uses. Not added. Re-run after a year of new data: `.venv/bin/python -m app.ml.meta_engine`.
+3. **AI agents (LLMs) cannot be backtested honestly.** A language model has read the history it would be tested on, so
+   any backtest of it leaks the future (the known weakness of published LLM-trading papers). The only fair test is
+   forward: the agents give their verdict before the trade fills, and the Signal test scores machine alone against
+   machine-when-agents-agreed / said wait / disagreed (0.43.0). **Pre-registered rule, written before any data:** after
+   30 finished machine signals that had an agent verdict, the agents' WAIT or opposite call becomes a veto only if the
+   "agents agreed" group beats "machine alone" by at least 0.15R a trade and the "agents said wait/against" group is
+   negative; otherwise they stay a second opinion. Until then the machine decides and the agents only advise.
+4. **What we did not do:** average the 8 decision rules, or switch to the rule that did best on 2025-26. All 8 were
+   positive on the unseen years, but choosing or blending them now would use those years to choose; the rule stays the
+   one chosen on 2020-24 (§13).
+
+Reading: the current design (one model, a rule chosen on old years, a simulation of its own past picks, and the agents
+as a forward-scored second opinion with a pre-registered veto test) is the research-supported way. The levers left are
+more and newer data (the monthly retrain) and the forward record, not more layers on top.

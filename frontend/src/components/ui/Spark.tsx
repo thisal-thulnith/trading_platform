@@ -10,8 +10,8 @@ export default function Spark({ values, height = 120, zero = false }: { values: 
   const up = values[values.length - 1] >= values[0];
   return (
     <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ height }} preserveAspectRatio="none">
-      {zero && <line x1={0} x2={W} y1={y(0)} y2={y(0)} stroke="#334155" strokeDasharray="4 4" />}
-      <path d={d} fill="none" stroke={up ? "#22c55e" : "#ef4444"} strokeWidth={1.6} vectorEffect="non-scaling-stroke" />
+      {zero && <line x1={0} x2={W} y1={y(0)} y2={y(0)} stroke="#d2d2d7" strokeDasharray="4 4" />}
+      <path d={d} fill="none" stroke={up ? "#1a9b48" : "#e0342b"} strokeWidth={1.6} vectorEffect="non-scaling-stroke" />
     </svg>
   );
 }

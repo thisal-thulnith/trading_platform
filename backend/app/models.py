@@ -77,6 +77,16 @@ class User(Base):
     settings: Mapped[dict] = mapped_column(JSON, default=dict)
 
 
+class Usage(Base):
+    """Daily usage counted against a plan (app/plans.py): key is a user id or "installation"."""
+    __tablename__ = "usage"
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_uuid)
+    key: Mapped[str] = mapped_column(String(64), index=True)
+    day: Mapped[str] = mapped_column(String(10), index=True)
+    kind: Mapped[str] = mapped_column(String(32))
+    count: Mapped[int] = mapped_column(default=0)
+
+
 class Watchlist(Base):
     __tablename__ = "watchlists"
     id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_uuid)
@@ -337,3 +347,41 @@ class MyTrade(Base):
     r_multiple: Mapped[float | None] = mapped_column(Float)
     source: Mapped[str] = mapped_column(String(16), default="manual")  # system | manual
     note: Mapped[str | None] = mapped_column(Text)
+
+
+class SignalTest(Base):
+    """Forward test of "Today's signal": every signal is written at the moment it is given (levels frozen), then graded
+    on the live 1h candles that come after it with the same rules as the backtest. Only the grading fields change.
+    source: auto = the platform's daily top LONG and top SHORT; user = a plan the user added to the test."""
+    __tablename__ = "signal_tests"
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_uuid)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
+    dedupe_key: Mapped[str] = mapped_column(String(96), unique=True)
+    source: Mapped[str] = mapped_column(String(8), default="auto")
+    as_of: Mapped[str] = mapped_column(String(10))           # the models' data date
+    symbol: Mapped[str] = mapped_column(String(24), index=True)
+    side: Mapped[str] = mapped_column(String(5))
+    status: Mapped[str] = mapped_column(String(8))           # trade | watch: what the page said when it was given
+    gates: Mapped[list] = mapped_column(JSON, default=list)
+    entry_type: Mapped[str] = mapped_column(String(8))       # market | limit
+    entry: Mapped[float] = mapped_column(Float)
+    stop: Mapped[float] = mapped_column(Float)
+    tp1: Mapped[float] = mapped_column(Float)
+    tp2: Mapped[float] = mapped_column(Float)
+    fast_stop: Mapped[float] = mapped_column(Float)
+    fast_tp: Mapped[float] = mapped_column(Float)
+    margin: Mapped[float] = mapped_column(Float, default=100.0)
+    safe_lev: Mapped[float] = mapped_column(Float, default=1.0)
+    fast_safe_lev: Mapped[float] = mapped_column(Float, default=1.0)
+    payload: Mapped[dict] = mapped_column(JSON, default=dict)  # what the backtest expected, score, rank, market
+    # grading (rewritten on every update until closed, then frozen)
+    state: Mapped[str] = mapped_column(String(12), default="waiting", index=True)  # waiting | open | closed | not_filled
+    filled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    outcome: Mapped[str | None] = mapped_column(String(16))
+    r: Mapped[float | None] = mapped_column(Float)
+    fast_state: Mapped[str] = mapped_column(String(12), default="waiting")
+    fast_outcome: Mapped[str | None] = mapped_column(String(16))
+    fast_r: Mapped[float | None] = mapped_column(Float)
+    last_price: Mapped[float | None] = mapped_column(Float)
+    updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

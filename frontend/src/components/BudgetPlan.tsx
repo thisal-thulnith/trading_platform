@@ -31,7 +31,7 @@ export default function BudgetPlan({ p }: { p: any }) {
       )}
       {p.expectations.length > 0 && (
         <table className="mt-2 w-full">
-          <thead className="text-left text-[10px] uppercase tracking-wider text-slate-500">
+          <thead className="text-left text-[11px] font-medium text-slate-500">
             <tr><th className="px-2 py-1">Research period</th><th className="px-2 py-1">Return</th><th className="px-2 py-1">Your {usd(p.budget_usd)} →</th><th className="px-2 py-1">Worst drop</th></tr>
           </thead>
           <tbody>
@@ -46,7 +46,7 @@ export default function BudgetPlan({ p }: { p: any }) {
           </tbody>
         </table>
       )}
-      <p className="mt-2 text-slate-500">No promise: these are the research results scaled to your budget. The system decides the coin, the size, the stop, the target and the leverage; you only choose the budget and the mode.</p>
+      <p className="mt-2 text-slate-500">Past research results, scaled to your budget. Not a promise.</p>
     </div>
   );
 }

@@ -8,28 +8,30 @@ export const CHAPTERS: Chapter[] = [
     lessons: [
       {
         slug: "getting-started", title: "Getting started in 5 minutes", level: "start",
-        body: `**What this platform is:** an always-on research assistant that watches about 20 major cryptocurrencies 24/7, analyses them the way a professional would, and tells you when a setup is forming, when it is confirmed, and — very often — that there is **no trade**.
+        body: `**What this platform is:** one main signal a day from a trained model, tested on years it never saw, plus tools to check it (all coins, the chart, the AI agents, news) and a portfolio that tracks the trades you take.
 
-**What it is not:** it never places orders, and it never promises profits. All results are simulated or paper-traded.
+**What it is not:** it never places orders and never promises profits. You place every order on Binance yourself.
 
-1. **Create an account** (top right → Log in → Register). This saves your drawings, watchlist and paper portfolio.
-2. **Open the Terminal.** Pick a coin on the left and a timeframe above the chart (start with **1h** or **4h**).
-3. **Press "▶ Step-by-step analysis".** The AI walks you through 15 steps, from the big picture down to a trade plan, and draws only what each step talks about. Use **Next** or the ← → keys, or press **Auto-play**.
-4. **Set up paper trading** (Portfolio page): enter a starting capital such as $1,000 and a risk per trade (1% is a sensible default).
-5. **Turn on alerts** (bell icon → enable browser notifications) to hear about setups as they form.
-6. **Read the Research Lab** before trusting any strategy: it shows which strategies actually made or lost money in testing.`,
+1. **Home** shows today's signal, your account, results and the market. The six steps at the bottom are the daily routine.
+2. **Today's signal** is the full plan: entry, stop loss, take profit, safe leverage, the three opinions (machine, simulation, AI agents) and whether it is still valid right now.
+3. **All coins** ranks every coin the machine scores, live, with a confidence level. Click a card to see its plan.
+4. **Portfolio**: enter your futures balance once. The Risk manager sizes each trade for it.
+5. Placed a trade on Binance? Press **I took this trade** on any signal. The Risk manager checks it first, then Portfolio tracks it live until it closes.
+6. **Results** and **History** show how every signal did. **Guide** (top right) explains every page and number; there is also a PDF.
+
+Quick search: press **Ctrl/⌘ K** (or "/") anywhere and type a coin or a page.`,
       },
       {
-        slug: "terminal-tour", title: "Tour of the terminal", level: "start",
-        body: `- **Left — market list.** Live prices, 24h change and a badge showing the most advanced setup on that coin (e.g. *S pre-signal* = a short setup waiting for confirmation). The ★ adds a coin to your watchlist.
-- **Centre — chart.** Candles, volume and indicators. The toolbar has drawing tools (trendline, ray, horizontal/vertical line, rectangle, Fibonacci, long-position box, text), undo/redo, **Indicators** (41 to choose from), **AI layers** (switch each AI concept on or off), **VP** (volume profile), save layout and screenshot.
-- **Right — Guided analysis** (the step-by-step walkthrough), **Full detail** (every number and piece of evidence) and **Analyst chat** (ask questions in plain English).
-- **Bottom** — active signals, alerts, order flow (liquidations and the order book), your positions, saved analysis versions and **Replay**.
+        slug: "terminal-tour", title: "Tour of the Chart page", level: "start",
+        body: `- **Left: coin list.** Live prices and 24h change. Search covers every USDT coin; the ★ adds a coin to your watchlist.
+- **Centre: chart.** Candles, volume and indicators, with drawing tools (trendline, ray, lines, rectangle, Fibonacci, position box, text), **Indicators**, **Overlays**, save layout and screenshot. The **main signal** for the coin is drawn on the chart: entry, stop loss and take profit.
+- **Right: Signal** (the main signal, the same card as everywhere else; first tab), **Chart reading (Lab)** and **Detail (Lab)** (the older chart scanner's code reading of this one chart, not the main signal), and **Analyst chat**.
+- **Bottom:** the chart scanner's setups (Lab; off the chart unless you tick "show chart-scanner arrows"), alerts, order flow, positions and replay.
 
-**Editing AI drawings:** click any AI object to see *why* it was detected. Drag it to adjust it: your version is saved separately and never overwrites the AI's original evidence. Press **Del** to hide an AI object or delete your own drawing. **Esc** cancels a tool.`,
+**Editing drawings:** click a drawn object to see why it is there and drag it to adjust; your version is saved separately. **Del** hides or deletes, **Esc** cancels a tool.`,
       },
       {
-        slug: "reading-signals", title: "How to read a signal", level: "start",
+        slug: "reading-signals", title: "How to read a chart-scanner setup (Lab)", level: "start",
         body: `Every setup goes through a **lifecycle**:
 
 | Stage | Meaning | What you do |
@@ -43,7 +45,7 @@ export const CHAPTERS: Chapter[] = [
 A confirmed signal shows the **entry zone, stop-loss, three targets, reward/risk after fees**, the conditions that were met, the validation gates and a **counter-argument review** (reasons it might fail). If a check fails (for example reward/risk too small, or the higher timeframe disagrees), the platform shows **NO TRADE** with the reasons. That is a feature: avoiding bad trades matters more than finding many trades.`,
       },
       {
-        slug: "walkthrough-guide", title: "The step-by-step walkthrough", level: "start", tryIt: "walk",
+        slug: "walkthrough-guide", title: "The chart scanner's step-by-step reading (Lab)", level: "start", tryIt: "walk",
         body: `The walkthrough copies how an experienced trader reads a chart, in this order:
 
 1. **Big picture** on higher timeframes (e.g. 1d and 4h before a 1h chart)
@@ -65,35 +67,8 @@ A confirmed signal shows the **entry zone, stop-loss, three targets, reward/risk
 Each step has a **verdict** (bullish / bearish / neutral). The summary weights them: the higher timeframe and structure count most, indicators least. It then reports a **confidence** of low, medium or high. When the steps disagree, confidence is low and the honest answer is usually "wait".`,
       },
       {
-        slug: "analysis-board", title: "The Analysis Board (drag & drop the agent's reasoning)", level: "start",
-        body: `The **Analysis Board** (top menu) shows the agent's thinking as a chain of concept cards, from left to right, the way a human analyst works top-down.
-
-- **Concept library (left):** every concept the agent knows — big picture, market type, structure, support/resistance, liquidity, order blocks, FVGs, premium/discount, Elliott Wave, momentum, futures positioning, news. Each card shows its current verdict.
-- **Reasoning chain (bottom):** the concepts the agent is using. **Drag** a card in from the library to add it, drag it back to remove it, or drag it left/right to reorder. The **trust slider** sets how much that concept counts. The "pts" number shows how far it pushes the conclusion.
-- **Conclusion (right):** updates instantly — direction, confidence, how much of the trusted evidence agrees, and which concepts support or argue against.
-- **Click any card** and the chart shows only what that concept found (the swing points, the zones, the liquidity…).
-- **Replay agent thinking** makes the agent go through the chain one concept at a time, highlighting each on the chart and writing down its thought.
-
-Try removing "Big picture" or raising the trust in "Momentum" and watch how the conclusion changes. It teaches you why a decision depends on *which* evidence you believe.`,
-      },
-      {
-        slug: "war-room", title: "The Desk: your AI trading team", level: "start",
-        body: `The **Desk** (home page) is the whole app on one screen. On the left are all coins with their current signal (BUY / SELL / WAIT); search covers every USDT coin on Binance. In the centre is the chart your agent team works on. On the right are the final signal and the team's conversation.
-
-**How the team works (with an AI key):**
-- **Chief**, the head trader, reads Scout's scan of every coin and the time of day, picks the coin worth studying, and decides *which* specialists fit this market. A trending market calls for structure, Dow and Elliott; a range calls for Wyckoff, Market Profile and liquidity; around a session open, ICT Power of 3.
-- Each specialist (Sage: SMC structure, Hunter: liquidity, Mason: order blocks/FVG, Composite: Wyckoff, Session: ICT time, Neo: NeoWave, Cycle: Hurst and more) reasons with its own method knowledge. It moves its mouse to the toolbar, picks a drawing tool, drags its evidence onto the chart, adds the indicators it wants and explains its view, replying to colleagues it disagrees with.
-- Chief makes the two sides of the biggest disagreement argue it out, **Skeptic** attacks the leading idea, and **Guard** sizes the risk. Then Chief decides.
-
-**What stops the AI from fooling you:** agents only see measured data and may not invent numbers. They can only draw real chart objects. A trade is only possible on a setup that passed every safety check: the AI may say "no trade" freely, but can never make up an entry, stop or target.
-
-**Without an AI key** the same team runs on rules (the brain badge in the top-right says which mode is on). To switch the AI on, put \`AIT_OPENAI_API_KEY=...\` (or \`AIT_ANTHROPIC_API_KEY=...\`) in \`backend/.env\` and restart the backend.
-
-Expert tools (manual charting terminal, backtests, research lab, radar…) are under **Advanced** in the top menu.`,
-      },
-      {
         slug: "paper-trading", title: "Paper trading & position sizing", level: "start",
-        body: `Paper trading means practising with fake money and real prices. On the **Portfolio** page you set your capital, your **risk per trade** (the % of the account you accept losing if the stop is hit), maximum drawdown, maximum positions and maximum leverage.
+        body: `Paper trading means practising with fake money and real prices. On the **Portfolio** page you enter your balance once; the **Risk manager** chooses the risk per trade (the % of the account you accept losing if the stop is hit: 1% to start) from the evidence, and limits the open risk and the number of positions.
 
 When you open a position, the platform **calculates the size for you**:
 
@@ -102,7 +77,7 @@ When you open a position, the platform **calculates the size for you**:
 Example: $1,000 account, 1% risk = $10. Entry $100, stop $98 → risk per coin ≈ $2.10 including costs → buy about **4.76 coins**. If the stop is hit you lose about $10, not your account. Leverage only changes how much margin is used, **not** how much you lose at the stop.`,
       },
       {
-        slug: "research-lab-guide", title: "Backtests & the Research Lab", level: "beginner",
+        slug: "research-lab-guide", title: "Backtests: how to read test results", level: "beginner",
         body: `A **backtest** replays history candle by candle and asks: "if this strategy had run, what would have happened?" This platform's backtester rebuilds the *exact* live analysis at every past candle, using only data available at that moment, and charges fees and slippage.
 
 Read results with these numbers:
@@ -111,7 +86,7 @@ Read results with these numbers:
 - **n** — number of trades. Under 30 is too few to judge.
 - **Out-of-sample** — the last 30% of the period. If it is much worse than in-sample, the strategy is probably overfit.
 
-The **Research Lab** shows every strategy's results. Strategies that reliably lose are **suspended automatically**.`,
+On this platform: **Results** grades every main signal on live prices, **History** shows any past day, and the **Simulator** (Lab) replays a strategy on any coin.`,
       },
     ],
   },

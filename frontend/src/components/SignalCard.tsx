@@ -8,8 +8,8 @@ export type Scan = { status: string; done: number; total: number; rows: ScanRow[
   screened?: number; all?: number };
 
 export function SignalBadge({ action, big }: { action: string; big?: boolean }) {
-  const c = action === "BUY" ? "bg-emerald-500 text-emerald-950" : action === "SELL" ? "bg-red-500 text-red-950" : "bg-slate-600 text-slate-100";
-  return <span className={`inline-block rounded font-black tracking-wide ${c} ${big ? "px-3 py-1 text-xl" : "px-2 py-0.5 text-xs"}`}>{action}</span>;
+  const c = action === "BUY" ? "bg-emerald-500/15 text-emerald-300" : action === "SELL" ? "bg-red-500/15 text-red-300" : "bg-fill text-slate-400";
+  return <span className={`inline-block rounded-full font-bold ${c} ${big ? "px-4 py-1 text-lg" : "px-2.5 py-0.5 text-[11px]"}`}>{action}</span>;
 }
 
 /** Entry / stop / target in plain words, with what it means for a $100 account risking 1%. */

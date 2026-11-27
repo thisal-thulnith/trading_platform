@@ -14,7 +14,7 @@ import { ChartToolbar, type Tool } from "./Toolbar";
 
 export type IndicatorCfg = { id: string; params: Record<string, string | number>; key: string };
 
-const PALETTE = ["#f59e0b", "#38bdf8", "#a78bfa", "#f472b6", "#34d399", "#fb7185", "#e2e8f0", "#facc15"];
+const PALETTE = ["#d97706", "#0071e3", "#7c3aed", "#db2777", "#059669", "#e11d48", "#3a3a3c", "#ca8a04"];
 const CONCEPT_LAYER: Record<string, string> = { elliott_impulse: "elliott", elliott_leading_diagonal: "elliott",
   elliott_zigzag: "elliott", elliott_flat: "elliott", elliott_expanded_flat: "elliott", elliott_contracting_triangle: "elliott" };
 
@@ -63,6 +63,9 @@ export default function TradingChart({ snapshot, signals, geoRef, overlay, contr
   const layerRef = useRef<DrawingLayer | null>(null);
   const indSeries = useRef<Record<string, ISeriesApi<any>[]>>({});
   const candlesRef = useRef<Candle[]>([]);
+  /** prices the price axis must include (the desk's plan: entry, stop, target) */
+  const keepInView = useRef<number[]>([]);
+  const loadReq = useRef(0);
   const [legend, setLegend] = useState<Candle | null>(null);
   const [tool, setTool] = useState<Tool>("cursor");
   const [userObjs, setUserObjs] = useState<ChartObject[]>([]);
@@ -96,15 +99,21 @@ export default function TradingChart({ snapshot, signals, geoRef, overlay, contr
     if (!box.current) return;
     const chart = createChart(box.current, {
       autoSize: true,
-      layout: { background: { type: ColorType.Solid, color: "#0b0f19" }, textColor: "#94a3b8", fontSize: 11,
-        panes: { separatorColor: "#1e293b", enableResize: true }, attributionLogo: true },
-      grid: { vertLines: { color: "#111827" }, horzLines: { color: "#111827" } },
+      layout: { background: { type: ColorType.Solid, color: "#ffffff" }, textColor: "#6e6e73", fontSize: 11,
+        panes: { separatorColor: "#e5e5ea", enableResize: true }, attributionLogo: true },
+      grid: { vertLines: { color: "#f2f2f5" }, horzLines: { color: "#f2f2f5" } },
       crosshair: { mode: CrosshairMode.Normal },
-      rightPriceScale: { borderColor: "#1e293b" },
-      timeScale: { borderColor: "#1e293b", timeVisible: true, secondsVisible: false, rightOffset: 12 },
+      rightPriceScale: { borderColor: "#e5e5ea" },
+      timeScale: { borderColor: "#e5e5ea", timeVisible: true, secondsVisible: false, rightOffset: 12 },
     });
-    const candles = chart.addSeries(CandlestickSeries, { upColor: "#22c55e", downColor: "#ef4444", borderVisible: false,
-      wickUpColor: "#22c55e", wickDownColor: "#ef4444" });
+    const candles = chart.addSeries(CandlestickSeries, { upColor: "#1a9b48", downColor: "#e0342b", borderVisible: false,
+      wickUpColor: "#1a9b48", wickDownColor: "#e0342b",
+      autoscaleInfoProvider: (original: () => { priceRange: { minValue: number; maxValue: number } } | null) => {
+        const r = original();
+        const keep = keepInView.current;
+        if (!r || !keep.length) return r;
+        return { ...r, priceRange: { minValue: Math.min(r.priceRange.minValue, ...keep), maxValue: Math.max(r.priceRange.maxValue, ...keep) } };
+      } });
     const vol = chart.addSeries(HistogramSeries, { priceScaleId: "vol", priceFormat: { type: "volume" }, lastValueVisible: false, priceLineVisible: false });
     chart.priceScale("vol").applyOptions({ scaleMargins: { top: 0.82, bottom: 0 } });
     const layer = new DrawingLayer();
@@ -133,9 +142,11 @@ export default function TradingChart({ snapshot, signals, geoRef, overlay, contr
   // ---------------------------------------------------------------- data
   const loadCandles = useCallback(async () => {
     const end = replayAt ? `&end=${replayAt * 1000}` : "";
+    const req = ++loadReq.current;
     setStatus("loading…");
     try {
       const r = await api<{ candles: Candle[] }>(`/candles/${symbol}?tf=${timeframe}&limit=1500${end}`);
+      if (req !== loadReq.current) return; // a newer coin or timeframe was requested meanwhile: drop this stale reply
       candlesRef.current = r.candles;
       candleRef.current?.setData(r.candles.map((c) => ({ ...c, time: c.time as UTCTimestamp })));
       volRef.current?.setData(r.candles.map((c) => ({ time: c.time as UTCTimestamp, value: c.volume,
@@ -145,7 +156,7 @@ export default function TradingChart({ snapshot, signals, geoRef, overlay, contr
       chartRef.current?.timeScale().scrollToRealTime();
       setStatus("");
     } catch (e: any) {
-      setStatus(`market data unavailable: ${e.message}`);
+      if (req === loadReq.current) setStatus(`market data unavailable: ${e.message}`);
     }
   }, [symbol, timeframe, replayAt]);
 
@@ -210,7 +221,7 @@ export default function TradingChart({ snapshot, signals, geoRef, overlay, contr
             s.setData(data);
             series.push(s);
           });
-          if (separate) r.meta.levels?.forEach((lv: number) => series[0]?.createPriceLine({ price: lv, color: "#334155", lineWidth: 1, lineStyle: 2, axisLabelVisible: false }));
+          if (separate) r.meta.levels?.forEach((lv: number) => series[0]?.createPriceLine({ price: lv, color: "#aeaeb2", lineWidth: 1, lineStyle: 2, axisLabelVisible: false }));
           indSeries.current[ind.key] = series;
         } catch {}
       }
@@ -293,6 +304,13 @@ export default function TradingChart({ snapshot, signals, geoRef, overlay, contr
     return snapshot.annotations.filter((a) => layers[CONCEPT_LAYER[a.concept || ""] || a.concept || ""] !== false);
   }, [snapshot, symbol, timeframe, layers, focus]);
 
+  // keep the plan's entry, stop and target on the price axis
+  useEffect(() => {
+    keepInView.current = (focus?.objects ?? []).filter((o) => o.concept === "plan")
+      .flatMap((o) => [o.entry, o.stop, o.target, o.price1]).filter((v): v is number => typeof v === "number" && isFinite(v));
+    chartRef.current?.priceScale("right").applyOptions({ autoScale: true });
+  }, [focus]);
+
   // scroll the chart so that the focused objects are visible
   useEffect(() => {
     const chart = chartRef.current;
@@ -372,7 +390,7 @@ export default function TradingChart({ snapshot, signals, geoRef, overlay, contr
       else if (tool === "vline") commitObject({ id, kind: "vline", origin: "user", time1: t, color: "#38bdf8" });
       else if (tool === "label") {
         const txt = prompt("Label text");
-        if (txt) commitObject({ id, kind: "label", origin: "user", time1: t, price1: p, label: txt.slice(0, 80), color: "#e2e8f0" });
+        if (txt) commitObject({ id, kind: "label", origin: "user", time1: t, price1: p, label: txt.slice(0, 80), color: "#1d1d1f" });
       } else if (tool === "position") {
         const a = (snapshot?.indicators.atr14 as number) || p * 0.01;
         commitObject({ id, kind: "position", origin: "user", time1: t, direction: "LONG", entry: p, stop: p - a, target: p + 2 * a, label: "LONG" });

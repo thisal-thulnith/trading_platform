@@ -8,6 +8,7 @@ import { api } from "@/lib/api";
 import { dirColor, fmtNum, fmtPct, fmtPrice, pair } from "@/lib/format";
 import { useStore } from "@/lib/store";
 import { Pct } from "@/components/ui/Pnl";
+import { Page } from "@/components/ui/Page";
 
 function Onboarding({ onDone, initial }: { onDone: () => void; initial?: any }) {
   const [f, setF] = useState<any>({ starting_capital: 1000, base_currency: "USDT", exchange: "binance", market: "perp", risk_per_trade_pct: 1,
@@ -22,8 +23,8 @@ function Onboarding({ onDone, initial }: { onDone: () => void; initial?: any }) 
   };
   return (
     <div className="card max-w-3xl space-y-3 p-4">
-      <h2 className="font-semibold text-slate-100">Account & risk configuration</h2>
-      <p className="text-[12px] text-slate-500">Paper trading only. Position sizes are computed from your stop distance, fees and these limits — never “all-in”.</p>
+      <h2 className="font-semibold text-slate-100">Account and risk settings</h2>
+      <p className="text-[12px] text-slate-500">Paper only. Sizes come from your stop, fees and these limits, never all-in.</p>
       <div className="grid grid-cols-3 gap-3">
         {num("starting_capital", "Starting capital")}
         <label className="flex flex-col text-[12px] text-slate-400">Market<select className="input" value={f.market} onChange={(e) => set("market", e.target.value)}><option value="perp">USDⓈ-M perpetual</option><option value="spot">Spot</option></select></label>
@@ -32,7 +33,7 @@ function Onboarding({ onDone, initial }: { onDone: () => void; initial?: any }) 
         {num("max_open_positions", "Max simultaneous positions")}{num("max_leverage", "Max leverage", 0.5)}
         <label className="flex flex-col text-[12px] text-slate-400">Preferred timeframes<input className="input" value={f.timeframes.join(",")} onChange={(e) => set("timeframes", e.target.value.split(",").map((x: string) => x.trim()))} /></label>
       </div>
-      <p className="text-[11px] text-slate-500">Leverage changes margin usage only; it never improves prediction accuracy. Liquidation estimates use conservative tier-1 maintenance-margin assumptions.</p>
+      <p className="text-[11px] text-slate-500">Leverage changes the margin, not the odds. Liquidation prices are estimates.</p>
       {err && <div className="text-red-300">{err}</div>}
       <div className="flex gap-2"><button className="btn btn-primary" onClick={() => submit(false)}>Save</button>{initial && <button className="btn" onClick={() => confirm("Reset paper account? Open positions are closed.") && submit(true)}>Reset account</button>}</div>
     </div>
@@ -75,11 +76,11 @@ function PaperPortfolio() {
   useEffect(() => { if (token && open) { load(); const i = setInterval(load, 2000); return () => clearInterval(i); } }, [token, open, load]);
   const head = (
     <div className="flex items-center">
-      <h2 className="font-semibold text-slate-100">Paper portfolio — auto-follow of the live signals</h2>
+      <h2 className="font-semibold text-slate-100">Auto-follow paper account</h2>
       <button className="btn ml-auto" onClick={() => setOpen(!open)}>{open ? "Hide" : "Show"}</button>
     </div>
   );
-  if (!open) return <div className="card p-3">{head}<p className="mt-1 text-[12px] text-slate-500">A separate simulated account that follows the live signal feed with its own risk settings. Login required.</p></div>;
+  if (!open) return <div className="card p-3">{head}<p className="mt-1 text-[12px] text-slate-500">A separate paper account that follows the live signals. Login required.</p></div>;
   if (!token) return <div className="card p-3">{head}<p className="mt-1 text-[12px] text-slate-400"><Link href="/login" className="text-sky-400">Log in</Link> to configure it.</p></div>;
   if (state === "loading") return <div className="card p-3">{head}<p className="mt-1 text-[12px] text-slate-500">Loading…</p></div>;
   if (state === "none" || edit) return <div className="card space-y-3 p-3">{head}<Onboarding initial={edit ? { ...pf?.risk, starting_capital: pf?.starting_capital } : undefined} onDone={() => { setEdit(false); load(); }} /><div className="max-w-3xl"><Sizer /></div></div>;
@@ -134,9 +135,8 @@ function PaperPortfolio() {
 
 export default function Portfolio() {
   return (
-    <div className="h-full space-y-4 overflow-auto p-4">
-      <MyTrades />
-      <PaperPortfolio />
-    </div>
+    <Page>
+      <MyTrades extra={<PaperPortfolio />} />
+    </Page>
   );
 }

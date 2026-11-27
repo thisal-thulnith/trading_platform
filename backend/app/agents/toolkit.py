@@ -13,6 +13,7 @@ import re
 from collections.abc import Callable
 from dataclasses import dataclass, field
 
+from app.agents import costs
 from app.agents.llm import client as anthropic_client
 from app.agents.llm import create, openai_client, provider
 from app.config import get_settings
@@ -62,11 +63,16 @@ def _args(raw) -> dict:
         return {}
 
 
-async def call_tool(tools: list[Tool], name: str, raw_args, used: list[dict]) -> str:
+async def call_tool(tools: list[Tool], name: str, raw_args, used: list[dict], on_tool: Callable | None = None) -> str:
     tool = next((t for t in tools if t.name == name), None)
     args = _args(raw_args)
     rec = {"name": name, "args": args, "ok": True}
     used.append(rec)
+    if on_tool:  # live progress (the desk turns it into cursor moves); must never break the run
+        try:
+            on_tool("start", name, args, None)
+        except Exception:  # noqa: BLE001
+            pass
     if tool is None:
         rec["ok"] = False
         return json.dumps({"error": f"unknown tool {name}"})
@@ -82,24 +88,33 @@ async def call_tool(tools: list[Tool], name: str, raw_args, used: list[dict]) ->
         rec["ok"] = False
         out = {"error": str(e)}
     s = json.dumps(out, default=str)
-    return s if len(s) <= RESULT_CHARS else s[:RESULT_CHARS] + '... (clipped)"}'
+    s = s if len(s) <= RESULT_CHARS else s[:RESULT_CHARS] + '... (clipped)"}'
+    rec["result"] = s  # kept for validators (fact-checking numbers); callers strip it before showing tools_used
+    if on_tool:
+        try:
+            on_tool("end", name, args, out)
+        except Exception:  # noqa: BLE001
+            pass
+    return s
 
 
 async def run_agent(system: str, task: str, tools: list[Tool], max_steps: int = 6, max_tokens: int = 4000,
-                    oai_client=None) -> AgentRun | None:
+                    oai_client=None, on_tool: Callable | None = None, model: str | None = None) -> AgentRun | None:
     """Run one agent to completion. Returns None when no LLM is configured. `oai_client` lets tests inject a fake
-    OpenAI-shaped client."""
+    OpenAI-shaped client; `model` overrides the configured model for this agent (e.g. a cheaper one for specialists)."""
     prov = "openai" if oai_client is not None else provider()
     if prov is None:
         return None
     if prov == "openai":
-        return await _run_openai(system, task, tools, max_steps, max_tokens, oai_client or openai_client())
-    return await _run_anthropic(system, task, tools, max_steps, max_tokens)
+        return await _run_openai(system, task, tools, max_steps, max_tokens, oai_client or openai_client(), on_tool,
+                                 model)
+    return await _run_anthropic(system, task, tools, max_steps, max_tokens, on_tool, model)
 
 
-async def _run_openai(system: str, task: str, tools: list[Tool], max_steps: int, max_tokens: int, client) -> AgentRun:
+async def _run_openai(system: str, task: str, tools: list[Tool], max_steps: int, max_tokens: int, client,
+                      on_tool: Callable | None = None, model: str | None = None) -> AgentRun:
     s = get_settings()
-    model = s.openai_model
+    model = model or s.openai_model
     specs = [{"type": "function", "function": {"name": t.name, "description": t.description, "parameters": t.parameters}}
              for t in tools]
     msgs: list[dict] = [{"role": "system", "content": system}, {"role": "user", "content": task}]
@@ -111,6 +126,7 @@ async def _run_openai(system: str, task: str, tools: list[Tool], max_steps: int,
         r = await client.chat.completions.create(
             model=model, messages=msgs, max_completion_tokens=max_tokens,
             **({"tools": specs, "tool_choice": "auto"} if specs and not final else {}))
+        costs.track_openai(r, model)
         m = r.choices[0].message
         calls = getattr(m, "tool_calls", None) or []
         if calls and not final:
@@ -118,7 +134,8 @@ async def _run_openai(system: str, task: str, tools: list[Tool], max_steps: int,
                          "tool_calls": [{"id": c.id, "type": "function",
                                          "function": {"name": c.function.name, "arguments": c.function.arguments}}
                                         for c in calls]})
-            results = await asyncio.gather(*(call_tool(tools, c.function.name, c.function.arguments, used) for c in calls))
+            results = await asyncio.gather(*(call_tool(tools, c.function.name, c.function.arguments, used, on_tool)
+                                             for c in calls))
             for c, res in zip(calls, results):
                 msgs.append({"role": "tool", "tool_call_id": c.id, "content": res})
             continue
@@ -127,7 +144,8 @@ async def _run_openai(system: str, task: str, tools: list[Tool], max_steps: int,
     return AgentRun(text, parse_json(text), used, steps, model)
 
 
-async def _run_anthropic(system: str, task: str, tools: list[Tool], max_steps: int, max_tokens: int) -> AgentRun:
+async def _run_anthropic(system: str, task: str, tools: list[Tool], max_steps: int, max_tokens: int,
+                         on_tool: Callable | None = None, model: str | None = None) -> AgentRun:
     c = anthropic_client()
     specs = [{"name": t.name, "description": t.description, "input_schema": t.parameters} for t in tools]
     msgs: list = [{"role": "user", "content": task}]
@@ -136,16 +154,17 @@ async def _run_anthropic(system: str, task: str, tools: list[Tool], max_steps: i
     for step in range(max_steps + 1):
         steps = step + 1
         final = step == max_steps
-        r = await create(c, max_tokens=max_tokens, messages=msgs,
+        r = await create(c, max_tokens=max_tokens, messages=msgs, model=model,
                          system=[{"type": "text", "text": system, "cache_control": {"type": "ephemeral"}}],
                          **({"tools": specs} if specs and not final else {}))
+        costs.track_anthropic(r, model or get_settings().llm_model)
         uses = [b for b in r.content if getattr(b, "type", "") == "tool_use"]
         if r.stop_reason == "tool_use" and uses and not final:
             msgs.append({"role": "assistant", "content": r.content})
-            results = await asyncio.gather(*(call_tool(tools, b.name, b.input, used) for b in uses))
+            results = await asyncio.gather(*(call_tool(tools, b.name, b.input, used, on_tool) for b in uses))
             msgs.append({"role": "user", "content": [{"type": "tool_result", "tool_use_id": b.id, "content": res}
                                                      for b, res in zip(uses, results)]})
             continue
         text = "".join(getattr(b, "text", "") for b in r.content if getattr(b, "type", "") == "text").strip()
         break
-    return AgentRun(text, parse_json(text), used, steps, get_settings().llm_model)
+    return AgentRun(text, parse_json(text), used, steps, model or get_settings().llm_model)

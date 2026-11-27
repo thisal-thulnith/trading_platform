@@ -7,6 +7,7 @@ import { dirColor, fmtNum, fmtPrice, pair, stateColor } from "@/lib/format";
 import { useStore } from "@/lib/store";
 import type { SignalRow } from "@/lib/types";
 import { SignalPnl } from "@/components/ui/Pnl";
+import { Note, Page, PageHead } from "@/components/ui/Page";
 
 export default function SignalDetail() {
   const { id } = useParams<{ id: string }>();
@@ -15,8 +16,8 @@ export default function SignalDetail() {
   const router = useRouter();
   const { setSymbol, setTimeframe, token } = useStore();
   useEffect(() => { api<SignalRow>(`/signals/${id}`).then(setS).catch((e) => setErr(e.message)); }, [id]);
-  if (err) return <div className="p-4 text-red-300">{err}</div>;
-  if (!s) return <div className="p-4 text-slate-500">Loading…</div>;
+  if (err) return <Page><Note tone="bad">{err}</Note></Page>;
+  if (!s) return <Page><div className="text-[13.5px] text-slate-500">Loading…</div></Page>;
   const p = s.payload || {};
   const v = p.validation || {};
   const entry = (s.entry_low + s.entry_high) / 2;
@@ -27,27 +28,24 @@ export default function SignalDetail() {
     } catch (e: any) { alert(e.message); }
   };
   return (
-    <div className="h-full overflow-auto p-4">
-      <div className="mb-3 flex items-center gap-3">
-        <Link href="/signals" className="text-slate-500">← signals</Link>
-        <h1 className="text-lg font-semibold text-slate-100">{pair(s.symbol)} <span className={dirColor(s.direction)}>{s.direction}</span></h1>
-        <span className={`chip ${stateColor(s.state)}`}>{s.state}</span>
-        <span className="text-slate-400">{s.strategy} · {s.timeframe}</span>
-        <button className="btn ml-auto" onClick={() => { setSymbol(s.symbol); setTimeframe(s.timeframe); router.push("/"); }}>Open chart</button>
+    <Page>
+      <PageHead title={<>{pair(s.symbol)} <span className={dirColor(s.direction)}>{s.direction}</span></>}
+        sub={<><Link href="/terminal" className="text-accent hover:underline">← Chart</Link> · <span className={`chip ${stateColor(s.state)}`}>{s.state}</span> {s.strategy} · {s.timeframe}</>}>
+        <button className="btn" onClick={() => { setSymbol(s.symbol); setTimeframe(s.timeframe); router.push("/terminal"); }}>Open chart</button>
         {s.snapshot_id && <Link className="btn" href={`/snapshots/${s.snapshot_id}`}>Evidence snapshot</Link>}
         {token && ["CONFIRMED", "ACTIVE"].includes(s.state) && <button className="btn btn-primary" onClick={follow}>Paper-trade this signal</button>}
-      </div>
+      </PageHead>
       <div className="grid grid-cols-3 gap-3">
         <div className="card col-span-2 p-3">
           <div className="num grid grid-cols-4 gap-3 text-[13px]">
             {[["Reference", s.reference_price], ["Entry zone", `${fmtPrice(s.entry_low)} – ${fmtPrice(s.entry_high)}`], ["Stop", s.stop], ["Fill", s.entry_fill],
               ["TP1", s.tp1], ["TP2", s.tp2], ["TP3", s.tp3], ["Exit", s.exit_price]].map(([k, val]) => (
-              <div key={k as string}><div className="text-[10px] uppercase text-slate-500">{k}</div><div className="text-slate-100">{typeof val === "number" ? fmtPrice(val) : val ?? "—"}</div></div>
+              <div key={k as string}><div className="text-[11px] font-medium text-slate-500">{k}</div><div className="text-slate-100">{typeof val === "number" ? fmtPrice(val) : val ?? "—"}</div></div>
             ))}
-            <div><div className="text-[10px] uppercase text-slate-500">R:R TP1/2/3 (net)</div><div>{fmtNum(v.rr_tp1)} / {fmtNum(v.rr_tp2)} / {fmtNum(v.rr_tp3)}</div></div>
-            <div><div className="text-[10px] uppercase text-slate-500">{s.state === "ACTIVE" ? "Live P&L" : "Result"}</div><div className="text-[15px]"><SignalPnl s={s} /></div></div>
-            <div><div className="text-[10px] uppercase text-slate-500">MFE / MAE</div><div>{fmtNum(s.mfe_r)}R / {fmtNum(s.mae_r)}R</div></div>
-            <div><div className="text-[10px] uppercase text-slate-500">Risk/unit</div><div>{fmtPrice(Math.abs(entry - s.stop))} ({fmtNum(Math.abs(entry - s.stop) / entry * 100)}%)</div></div>
+            <div><div className="text-[11px] font-medium text-slate-500">R:R TP1/2/3 (net)</div><div>{fmtNum(v.rr_tp1)} / {fmtNum(v.rr_tp2)} / {fmtNum(v.rr_tp3)}</div></div>
+            <div><div className="text-[11px] font-medium text-slate-500">{s.state === "ACTIVE" ? "Live P&L" : "Result"}</div><div className="text-[15px]"><SignalPnl s={s} /></div></div>
+            <div><div className="text-[11px] font-medium text-slate-500">MFE / MAE</div><div>{fmtNum(s.mfe_r)}R / {fmtNum(s.mae_r)}R</div></div>
+            <div><div className="text-[11px] font-medium text-slate-500">Risk/unit</div><div>{fmtPrice(Math.abs(entry - s.stop))} ({fmtNum(Math.abs(entry - s.stop) / entry * 100)}%)</div></div>
           </div>
           <h2 className="mb-1 mt-4 font-medium text-slate-200">Explainable signal timeline</h2>
           <ol className="relative ml-2 border-l border-line">
@@ -85,6 +83,6 @@ export default function SignalDetail() {
           )}
         </div>
       </div>
-    </div>
+    </Page>
   );
 }

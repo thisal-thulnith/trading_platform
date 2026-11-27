@@ -45,6 +45,11 @@ def _utc(ts: datetime | pd.Timestamp) -> pd.Timestamp:
     return x.tz_localize("UTC") if x.tzinfo is None else x.tz_convert("UTC")
 
 
+def sgn(t: MyTrade) -> int:
+    """+1 for a long, -1 for a short: every price difference is multiplied by it."""
+    return -1 if (t.side or "LONG") == "SHORT" else 1
+
+
 def remaining_qty(t: MyTrade) -> float:
     return t.qty - (t.partial_qty or 0.0)
 
@@ -53,11 +58,11 @@ def banked(t: MyTrade) -> float:
     """Profit already taken at the partial, net of its fee."""
     if not t.partial_done or not t.partial_price or not t.partial_qty:
         return 0.0
-    return (t.partial_price - t.entry) * t.partial_qty - t.partial_qty * t.partial_price * _fee(t)
+    return (t.partial_price - t.entry) * sgn(t) * t.partial_qty - t.partial_qty * t.partial_price * _fee(t)
 
 
 def unrealized(t: MyTrade, mark: float) -> float:
-    return banked(t) + (mark - t.entry) * remaining_qty(t) - t.qty * t.entry * _fee(t)
+    return banked(t) + (mark - t.entry) * sgn(t) * remaining_qty(t) - t.qty * t.entry * _fee(t)
 
 
 async def marks(symbols: list[str], fallback: dict[str, float] | None = None) -> dict[str, float]:
@@ -81,12 +86,53 @@ async def marks(symbols: list[str], fallback: dict[str, float] | None = None) ->
     return out
 
 
+MAIN_PLAN_DAYS = 14   # the unified engine's plans: one target, no partial close, a fixed stop, up to 14 days
+
+
+def _main_plan_state(t: MyTrade, frame: pd.DataFrame | None) -> dict:
+    """Next step for a trade taken from Today's plan (the main signal): it is managed exactly as it was tested."""
+    d = sgn(t)
+    away = lambda p: f"{abs(p / t.entry - 1) * 100:.1f}% {'below' if p < t.entry else 'above'} entry"  # noqa: E731
+    hold = (f"Hold. Stop {t.stop:.6g} ({away(t.stop)}), take profit {t.target:.6g} ({(t.target / t.entry - 1) * 100:+.1f}%). "
+            + ("Don't move the stop or close part of it: the plan was tested this way" if (t.source or "") == "planner"
+               else "Keep the stop where it is"))
+    out = {"action": "hold", "level": "info", "recommended_stop": t.stop, "days": 0,
+           "text": hold + ". No finished daily candle since the entry yet."}
+    if frame is None or frame.empty:
+        return out
+    held = frame.loc[frame.index >= _utc(t.opened_at).floor("D")]
+    if held.empty:
+        return out
+    days = len(held)
+    worst = float(held.low.min()) if d == 1 else float(held.high.max())
+    best = float(held.high.max()) if d == 1 else float(held.low.min())
+    out["days"] = days
+    if (worst - t.stop) * d <= 0:
+        out |= {"action": "close", "level": "warn",
+                "text": f"Stop {t.stop:.6g} was touched. If Binance did not close it, close now and record the exit."}
+    elif (best - t.target) * d >= 0:
+        out |= {"action": "close", "level": "good",
+                "text": f"Take profit {t.target:.6g} was reached. If Binance did not close it, close now and record the exit."}
+    elif days >= MAIN_PLAN_DAYS and (t.source or "") == "planner":
+        out |= {"action": "close", "level": "warn",
+                "text": f"{days} days held: the {MAIN_PLAN_DAYS}-day limit. Close at market and record the exit."}
+    else:
+        out["text"] = hold + (f", day {days} of {MAIN_PLAN_DAYS}." if (t.source or "") == "planner" else f", day {days}.")
+    return out
+
+
 def plan_state(t: MyTrade, frame: pd.DataFrame | None) -> dict:
-    """What the daily-trend rules say to do next, judged on the finished daily candles since the trade opened."""
-    stop_now = max(t.stop, t.entry) if t.partial_done else t.stop
+    """What to do next, judged on the finished daily candles since the trade opened. Trades from Today's plan follow
+    the main plan (one target, 14 days); others follow the daily-trend rules (a third at 2R, a trailing stop).
+    Shorts are mirrored: the stop sits above, the target below, and the trail follows the close down."""
+    if (t.source or "") != "system":   # the main plan, your own trades and the agents' plans: one stop, one target
+        return _main_plan_state(t, frame)
+    d = sgn(t)
+    stop_now = (max(t.stop, t.entry) if d == 1 else min(t.stop, t.entry)) if t.partial_done else t.stop
+    away = lambda p: f"{abs(p / t.entry - 1) * 100:.1f}% {'below' if p < t.entry else 'above'} entry"  # noqa: E731
+    hold = f"Hold. Stop {stop_now:.6g} ({away(stop_now)}), target {t.target:.6g} ({(t.target / t.entry - 1) * 100:+.1f}%)"
     out = {"action": "hold", "level": "info", "recommended_stop": stop_now, "days": 0,
-           "text": f"Hold. Stop {stop_now:.6g} ({(1 - stop_now / t.entry) * 100:.1f}% below entry), target {t.target:.6g} "
-                   f"(+{(t.target / t.entry - 1) * 100:.1f}%). No finished daily candle since the entry yet."}
+           "text": hold + ". No finished daily candle since the entry yet."}
     if frame is None or frame.empty:
         return out
     held = frame.loc[frame.index >= _utc(t.opened_at).floor("D")]
@@ -97,25 +143,28 @@ def plan_state(t: MyTrade, frame: pd.DataFrame | None) -> dict:
     since_partial = held.loc[held.index > _utc(t.partial_at).floor("D")] if t.partial_done and t.partial_at else held
     rec = stop_now
     if t.partial_done and np.isfinite(last.atr):
-        rec = max(stop_now, float(last.close - dt.TRAIL_ATR * last.atr))
+        trail = float(last.close - d * dt.TRAIL_ATR * last.atr)
+        rec = max(stop_now, trail) if d == 1 else min(stop_now, trail)
     out |= {"days": days, "recommended_stop": rec}
-    if len(since_partial) and float(since_partial.low.min()) <= stop_now:
+    worst = float(since_partial.low.min()) if d == 1 else float(since_partial.high.max()) if len(since_partial) else None
+    best = float(held.high.max()) if d == 1 else float(held.low.min())
+    if len(since_partial) and (worst - stop_now) * d <= 0:
         out |= {"action": "close", "level": "warn",
-                "text": f"Stop {stop_now:.6g} was touched (daily low {float(since_partial.low.min()):.6g}). If Binance did "
-                        f"not close it, close now and record the exit."}
-    elif not t.partial_done and float(held.high.max()) >= t.target:
+                "text": f"Stop {stop_now:.6g} was touched (daily {'low' if d == 1 else 'high'} {worst:.6g}). If Binance "
+                        f"did not close it, close now and record the exit."}
+    elif not t.partial_done and (best - t.target) * d >= 0:
         out |= {"action": "partial", "level": "good",
-                "text": f"2R reached (high {float(held.high.max()):.6g} ≥ {t.target:.6g}): sell a third at the target, "
-                        f"move the stop to entry {t.entry:.6g}, then confirm below."}
+                "text": f"2R reached ({'high' if d == 1 else 'low'} {best:.6g} vs target {t.target:.6g}): "
+                        f"{'sell' if d == 1 else 'buy back'} a third at the target, move the stop to entry {t.entry:.6g}, then confirm below."}
     elif days >= dt.MAX_HOLD_DAYS:
         out |= {"action": "close", "level": "warn",
                 "text": f"{days} days held — the {dt.MAX_HOLD_DAYS}-day limit. Close at market and record the exit."}
-    elif t.partial_done and rec > stop_now * (1 + 1e-9):
+    elif t.partial_done and (rec - stop_now) * d > abs(stop_now) * 1e-9:
         out |= {"action": "raise_stop", "level": "good",
-                "text": f"Raise the stop to {rec:.6g} ({dt.TRAIL_ATR:g} ATR below yesterday's close {float(last.close):.6g})."}
+                "text": f"{'Raise' if d == 1 else 'Lower'} the stop to {rec:.6g} ({dt.TRAIL_ATR:g} ATR "
+                        f"{'below' if d == 1 else 'above'} yesterday's close {float(last.close):.6g})."}
     else:
-        out["text"] = (f"Hold. Stop {stop_now:.6g} ({(1 - stop_now / t.entry) * 100:.1f}% below entry), target "
-                       f"{t.target:.6g} (+{(t.target / t.entry - 1) * 100:.1f}%), day {days} of {dt.MAX_HOLD_DAYS}.")
+        out["text"] = hold + f", day {days} of {dt.MAX_HOLD_DAYS}."
     return out
 
 
@@ -123,22 +172,24 @@ def card(t: MyTrade, mark: float | None, state: dict) -> dict:
     rem = remaining_qty(t)
     margin = t.qty * t.entry / max(t.leverage, 1.0)
     pnl = unrealized(t, mark) if mark else None
-    liq = fut.liquidation_price(t.entry, t.leverage, t.symbol) if t.venue == "futures" and t.leverage > 1 else None
+    d = sgn(t)
+    liq = fut.liquidation_price(t.entry, t.leverage, t.symbol, t.side) if t.venue == "futures" and t.leverage > 1 else None
+    be_stop = (max(t.stop, t.entry) if d == 1 else min(t.stop, t.entry)) if t.partial_done else t.stop
     return {"id": t.id, "symbol": t.symbol, "venue": t.venue, "side": t.side, "leverage": t.leverage,
             "contract": f"{t.symbol} Perpetual" if t.venue == "futures" else f"{t.symbol} Spot",
             "margin_mode": "Isolated" if t.venue == "futures" else None,
             "qty": t.qty, "qty_open": round(rem, 10), "entry": t.entry, "mark": mark,
             "size_usd": round(rem * mark, 2) if mark else None, "margin_usd": round(margin, 2),
             "liquidation": round(liq, 8) if liq else None,
-            "liq_distance_pct": round((mark / liq - 1) * 100, 1) if liq and mark else None,
+            "liq_distance_pct": round(abs(mark / liq - 1) * 100, 1) if liq and mark else None,
             "stop": t.stop, "target": t.target, "recommended_stop": state["recommended_stop"],
             "partial_done": t.partial_done, "partial_price": t.partial_price, "banked_usd": round(banked(t), 2),
             "pnl_usd": round(pnl, 2) if pnl is not None else None,
-            "pnl_pct": round((mark / t.entry - 1) * 100, 2) if mark else None,
+            "pnl_pct": round((mark / t.entry - 1) * 100 * d, 2) if mark else None,
             "roe_pct": round(pnl / margin * 100, 2) if pnl is not None and margin else None,
             "r": round(pnl / t.risk_usd, 2) if pnl is not None and t.risk_usd else None,
             "risk_usd": round(t.risk_usd, 2),
-            "open_risk_usd": round(max(0.0, (t.entry - (max(t.stop, t.entry) if t.partial_done else t.stop)) * rem), 2),
+            "open_risk_usd": round(max(0.0, (t.entry - be_stop) * d * rem), 2),
             "days": state["days"], "opened_at": _utc(t.opened_at).isoformat(), "action": state["action"],
             "plan": state["text"], "level": state["level"], "mode": t.mode, "budget_usd": t.budget_usd,
             "source": t.source, "note": t.note}
@@ -150,7 +201,7 @@ def closed_card(t: MyTrade) -> dict:
             "contract": f"{t.symbol} Perpetual" if t.venue == "futures" else f"{t.symbol} Spot",
             "qty": t.qty, "entry": t.entry, "exit": t.exit_price, "partial_done": t.partial_done,
             "partial_price": t.partial_price, "pnl_usd": round(t.pnl_usd or 0.0, 2), "r": round(t.r_multiple or 0.0, 2),
-            "pnl_pct": round((t.exit_price / t.entry - 1) * 100, 2) if t.exit_price else None,
+            "pnl_pct": round((t.exit_price / t.entry - 1) * 100 * sgn(t), 2) if t.exit_price else None,
             "roe_pct": round((t.pnl_usd or 0.0) / margin * 100, 2) if margin else None, "reason": t.close_reason,
             "opened_at": _utc(t.opened_at).isoformat(), "closed_at": _utc(t.closed_at).isoformat() if t.closed_at else None,
             "days": int((_utc(t.closed_at) - _utc(t.opened_at)).days) if t.closed_at else None, "mode": t.mode,
@@ -210,7 +261,7 @@ def coach(open_cards: list[dict], trades: list[MyTrade], st: dict, plan: dict, p
         if plan_risk and t.risk_usd > 1.5 * plan_risk:
             issues.append(f"{t.symbol.replace('USDT', '')} risked ${t.risk_usd:.2f} against a plan of ${plan_risk:.2f}")
         if t.venue == "futures":
-            safe = fut.safe_leverage((t.entry - t.stop) / t.entry, t.symbol)
+            safe = fut.safe_leverage(abs(t.entry - t.stop) / t.entry, t.symbol)
             if t.leverage > safe:
                 issues.append(f"{t.symbol.replace('USDT', '')} at {t.leverage:g}x is above the safe {safe}x for its stop")
     if st["open_risk_usd"] > b * rules.max_open_risk_pct / 100 + 1e-9:
@@ -245,24 +296,30 @@ async def add(db: AsyncSession, user_id: str | None, body: dict) -> MyTrade:
     venue = body.get("venue", "spot")
     if venue not in ("spot", "futures"):
         raise ValueError("venue must be spot or futures")
+    side = str(body.get("side") or "LONG").upper()
+    if side not in ("LONG", "SHORT"):
+        raise ValueError("side must be LONG or SHORT")
+    if side == "SHORT" and venue != "futures":
+        raise ValueError("a short needs futures; spot can only buy")
+    d = 1 if side == "LONG" else -1
     entry, qty, stop = float(body["entry"]), float(body["qty"]), float(body["stop"])
     if entry <= 0 or qty <= 0:
         raise ValueError("entry and qty must be positive")
-    if stop >= entry:
-        raise ValueError("the stop must be below the entry (long trades only)")
-    target = float(body.get("target") or entry + dt.RR * (entry - stop))
-    if target <= entry:
-        raise ValueError("the target must be above the entry")
+    if (entry - stop) * d <= 0:
+        raise ValueError(f"the stop must be {'below' if d == 1 else 'above'} the entry for a {side.lower()}")
+    target = float(body.get("target") or entry + d * dt.RR * abs(entry - stop))
+    if (target - entry) * d <= 0:
+        raise ValueError(f"the target must be {'above' if d == 1 else 'below'} the entry for a {side.lower()}")
     lev = float(body.get("leverage") or 1) if venue == "futures" else 1.0
     if not 1 <= lev <= 125:
         raise ValueError("leverage must be 1..125")
     fee = FEES[venue]
     opened = body.get("opened_at")
-    t = MyTrade(user_id=user_id, symbol=str(body["symbol"]).upper(), venue=venue, side="LONG", leverage=lev,
+    t = MyTrade(user_id=user_id, symbol=str(body["symbol"]).upper(), venue=venue, side=side, leverage=lev,
                 entry=entry, qty=qty, stop=stop, target=target,
-                risk_usd=(entry - stop) * qty + qty * entry * fee + qty * stop * fee,
+                risk_usd=abs(entry - stop) * qty + qty * entry * fee + qty * stop * fee,
                 budget_usd=float(body.get("budget_usd") or 100.0), mode=str(body.get("mode") or "conservative"),
-                source=str(body.get("source") or "manual"), note=body.get("note"),
+                source=str(body.get("source") or "manual")[:16], note=body.get("note"),
                 opened_at=_utc(opened).to_pydatetime() if opened else datetime.now(UTC))
     db.add(t)
     await db.commit()
@@ -278,7 +335,7 @@ async def partial(db: AsyncSession, t: MyTrade, price: float, qty: float | None 
     if not 0 < q < t.qty:
         raise ValueError("the partial quantity must be between 0 and the position size")
     t.partial_done, t.partial_price, t.partial_qty, t.partial_at = True, float(price), q, datetime.now(UTC)
-    t.stop = max(t.stop, t.entry)
+    t.stop = max(t.stop, t.entry) if sgn(t) == 1 else min(t.stop, t.entry)
     await db.commit()
     return t
 
@@ -290,7 +347,7 @@ async def close(db: AsyncSession, t: MyTrade, price: float, reason: str = "manua
         raise ValueError("price must be positive")
     rem = remaining_qty(t)
     fee = _fee(t)
-    pnl = banked(t) + (price - t.entry) * rem - rem * price * fee - t.qty * t.entry * fee
+    pnl = banked(t) + (price - t.entry) * sgn(t) * rem - rem * price * fee - t.qty * t.entry * fee
     t.exit_price, t.closed_at, t.close_reason, t.status = float(price), datetime.now(UTC), reason[:24], "closed"
     t.pnl_usd, t.r_multiple = pnl, (pnl / t.risk_usd if t.risk_usd else None)
     await db.commit()
